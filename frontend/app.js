@@ -1,4 +1,4 @@
-﻿let API_BASE_URL = (
+let API_BASE_URL = (
   window.__APP_CONFIG__ &&
   typeof window.__APP_CONFIG__.BACKEND_URL === "string" &&
   window.__APP_CONFIG__.BACKEND_URL.trim()
@@ -10,6 +10,8 @@ const byId = (id) => document.getElementById(id);
 const chatBody = byId("chat-body");
 const chatInput = byId("chat-input");
 const chatSend = byId("chat-send");
+const supervisorNav = byId("supervisor-nav");
+const supervisorPanel = byId("supervisor-panel");
 const dashboardNav = byId("dashboard-nav");
 const heroCard = byId("hero-card");
 const loadingPanel = byId("loading-panel");
@@ -36,6 +38,11 @@ const btnSidebarChat = byId("btn-sidebar-chat");
 const chatHistoryPanel = byId("chat-history-panel");
 const chatSessionsList = byId("chat-sessions-list");
 const chatPanel = document.querySelector(".chat-panel");
+const tabChatbotBtn = byId("tab-chatbot-btn");
+const tabSuggestionsBtn = byId("tab-suggestions-btn");
+const chatbotContentArea = byId("chatbot-content-area");
+const suggestionsContentArea = byId("suggestions-content-area");
+const btnChatClose = byId("btn-chat-close");
 const historyPanel = byId("history-panel");
 const navExecutionHistory = byId("nav-execution-history");
 const historyOutput = byId("history-output");
@@ -309,7 +316,22 @@ function toPublicAssetUrl(rawPath) {
   return `${API_BASE_URL}/output/${relative.replace(/^\/+/, "")}`;
 }
 
+function showSupervisor() {
+  if (supervisorPanel) supervisorPanel.classList.remove("hidden");
+  heroCard.classList.add("hidden");
+  loadingPanel.classList.add("hidden");
+  resultsPanel.classList.add("hidden");
+  if (historyPanel) historyPanel.classList.add("hidden");
+
+  if (supervisorNav) supervisorNav.classList.add("active");
+  if (dashboardNav) dashboardNav.classList.remove("active");
+  document.querySelectorAll(".specialist").forEach((n) => n.classList.remove("active"));
+  if (navExecutionHistory) navExecutionHistory.classList.remove("active");
+}
+
 function showDashboard() {
+  if (supervisorPanel) supervisorPanel.classList.add("hidden");
+  if (supervisorNav) supervisorNav.classList.remove("active");
   heroCard.classList.remove("hidden");
   loadingPanel.classList.add("hidden");
   // Only hide results if we haven't generated anything yet
@@ -325,6 +347,7 @@ function showDashboard() {
 }
 
 function showLoading() {
+  if (supervisorPanel) supervisorPanel.classList.add("hidden");
   heroCard.classList.add("hidden");
   loadingPanel.classList.remove("hidden");
   resultsPanel.classList.add("hidden");
@@ -332,6 +355,7 @@ function showLoading() {
 }
 
 function showResults() {
+  if (supervisorPanel) supervisorPanel.classList.add("hidden");
   heroCard.classList.add("hidden");
   loadingPanel.classList.add("hidden");
   resultsPanel.classList.remove("hidden");
@@ -339,6 +363,8 @@ function showResults() {
 }
 
 function showHistory() {
+  if (supervisorPanel) supervisorPanel.classList.add("hidden");
+  if (supervisorNav) supervisorNav.classList.remove("active");
   heroCard.classList.add("hidden");
   loadingPanel.classList.add("hidden");
   resultsPanel.classList.add("hidden");
@@ -371,6 +397,8 @@ function resetOutputs() {
 }
 
 function activateTab(tab) {
+  if (supervisorPanel) supervisorPanel.classList.add("hidden");
+  if (supervisorNav) supervisorNav.classList.remove("active");
   document.querySelectorAll(".tab").forEach((n) => n.classList.toggle("active", n.dataset.tab === tab));
   ["finals", "previews", "hooks", "angles", "copy", "concepts", "exports"].forEach((name) => {
     byId(`tab-${name}`).classList.toggle("hidden", tab !== name);
@@ -991,10 +1019,22 @@ function wireEvents() {
     }
   });
 
+  if (supervisorNav) {
+    supervisorNav.addEventListener("click", () => {
+      showSupervisor();
+      setStatus("Performance Supervisor active.");
+    });
+  }
+
   dashboardNav.addEventListener("click", () => {
     showDashboard();
     setStatus("Finished ad workspace ready.");
   });
+
+  const supBtnKb = byId("sup-btn-kb");
+  if (supBtnKb) {
+    supBtnKb.addEventListener("click", openKbModal);
+  }
 
   document.querySelectorAll(".tab").forEach((tab) => {
     tab.addEventListener("click", () => activateTab(tab.dataset.tab));
@@ -1317,9 +1357,122 @@ function wireEvents() {
   if (btnKnowledgeBase) {
     btnKnowledgeBase.addEventListener("click", openKbModal);
   }
+
+  if (tabChatbotBtn && tabSuggestionsBtn) {
+    tabChatbotBtn.addEventListener("click", () => {
+      tabChatbotBtn.classList.add("active");
+      tabSuggestionsBtn.classList.remove("active");
+      chatbotContentArea.classList.remove("hidden");
+      suggestionsContentArea.classList.add("hidden");
+    });
+
+    tabSuggestionsBtn.addEventListener("click", () => {
+      tabSuggestionsBtn.classList.add("active");
+      tabChatbotBtn.classList.remove("active");
+      suggestionsContentArea.classList.remove("hidden");
+      chatbotContentArea.classList.add("hidden");
+      fetchAndRenderSuggestions();
+    });
+  }
+
+  if (btnChatClose && chatPanel) {
+    btnChatClose.addEventListener("click", () => {
+      chatPanel.classList.add("hidden");
+    });
+  }
 }
+
+async function fetchAndRenderSuggestions() {
+  const container = byId("suggestions-list");
+  if (!container) return;
+
+  if (!chatContext || !chatContext.campaign) {
+    container.innerHTML = `
+      <div class="card" style="border: 1px dashed var(--line); text-align: center; padding: 20px; background: #18181b;">
+        <p style="margin: 0; color: var(--muted);">No campaign generated yet. Suggestions will appear here once you generate a campaign.</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = '<div style="padding: 10px; color: var(--muted); text-align: center;">Loading suggestions...</div>';
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/suggestions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ campaign: chatContext.campaign })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const suggestions = data.suggestions || [];
+    if (suggestions.length === 0) {
+      container.innerHTML = `
+        <div class="card" style="border: 1px dashed var(--line); text-align: center; padding: 20px; background: #18181b;">
+          <p style="margin: 0; color: var(--muted);">No suggestions available for the current campaign.</p>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = suggestions.map((s) => {
+      const categoryLabel = String(s.category || "").replaceAll('_', ' ');
+      return `
+        <div class="suggestion-card" id="sug-${s.id}">
+          <span class="suggestion-category category-${s.category}">${esc(categoryLabel)}</span>
+          <h4 class="suggestion-title-text">${esc(s.title)}</h4>
+          <p class="suggestion-desc-text">${esc(s.description)}</p>
+          <button class="suggestion-btn" onclick="executeSuggestion('${esc(s.id)}')" type="button">Execute</button>
+        </div>
+      `;
+    }).join("");
+
+    window.currentSuggestions = suggestions;
+  } catch (error) {
+    console.error("Suggestions fetch error:", error);
+    container.innerHTML = `
+      <div class="card" style="border: 1px dashed var(--line); text-align: center; padding: 20px; background: #18181b;">
+        <p style="margin: 0; color: #ff6b6b;">Error loading suggestions. Please ensure the API is running.</p>
+      </div>
+    `;
+  }
+}
+window.fetchAndRenderSuggestions = fetchAndRenderSuggestions;
+
+async function executeSuggestion(id) {
+  const suggestion = window.currentSuggestions?.find(s => s.id === id);
+  if (!suggestion) return;
+
+  const btn = document.querySelector(`#sug-${id} .suggestion-btn`);
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Executing...";
+  }
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/execute-suggestion`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ suggestion, campaign: chatContext.campaign })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    
+    setStatus(data.message || "Suggestion executed successfully!", false);
+    await fetchAndRenderSuggestions();
+  } catch (error) {
+    console.error("Execute suggestion error:", error);
+    setStatus("Failed to execute suggestion.", true);
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "Execute";
+    }
+  }
+}
+window.executeSuggestion = executeSuggestion;
 
 resetOutputs();
 wireEvents();
 loadUiConfig();
 loadChatHistory();
+showSupervisor();

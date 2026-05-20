@@ -28,7 +28,7 @@ CREATIVE_SYSTEM_PROMPT = (
 
 def brand_context(payload: CreativeInput) -> str:
     brand_colors = ", ".join(payload.brand_colors) if payload.brand_colors else "Not specified"
-    logo_hint = payload.logo_image if payload.logo_image else "Not provided"
+    logo_hint = "Logo is provided and must be used" if payload.logo_image else "Not provided"
     return (
         f"Brand: {payload.brand_name}\n"
         f"Product: {payload.product_description}\n"

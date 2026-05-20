@@ -14,23 +14,37 @@ from app.api.routes.providers import router as providers_router
 from app.core.config import get_settings
 from app.services.engine import ServiceContainer
 
+# ---------------------------------------------------------------------------
+# Load .env into os.environ so GOOGLE_CREDENTIALS_JSON (and other vars) are
+# visible to os.getenv().  pydantic-settings loads them into its own Settings
+# model but does NOT inject them into os.environ.
+# ---------------------------------------------------------------------------
+try:
+    from dotenv import load_dotenv
+    load_dotenv(override=False)
+except ImportError:
+    pass  # dotenv not installed; rely on actual environment
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+_CREDS_PATH = str(PROJECT_ROOT / "google-credentials.json")
+
 # Write Google credentials from environment variable if present
 google_creds_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
 if google_creds_json:
     try:
         # Parse and validate JSON
         creds_dict = json.loads(google_creds_json)
-        # Write to file
-        creds_path = "google-credentials.json"
-        with open(creds_path, "w") as f:
+        with open(_CREDS_PATH, "w") as f:
             json.dump(creds_dict, f)
-        # Ensure Google SDKs can discover credentials in container environments.
-        os.environ.setdefault("GOOGLE_APPLICATION_CREDENTIALS", creds_path)
-        print("[INFO] Google credentials written to google-credentials.json")
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = _CREDS_PATH
+        print(f"[INFO] Google credentials written to {_CREDS_PATH}")
     except Exception as e:
         print(f"[WARNING] Failed to write Google credentials: {e}")
+elif Path(_CREDS_PATH).exists():
+    # Credentials file already exists (e.g. created manually); just point the SDK at it.
+    os.environ.setdefault("GOOGLE_APPLICATION_CREDENTIALS", _CREDS_PATH)
+    print(f"[INFO] Using existing Google credentials at {_CREDS_PATH}")
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
 FRONTEND_DIR = PROJECT_ROOT / "frontend"
 
 @asynccontextmanager
