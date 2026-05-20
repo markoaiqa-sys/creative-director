@@ -339,12 +339,18 @@ class CreativeDirectorEngine:
         hook_lookup = {hook.text: hook for hook in hooks}
         angle_lookup = {angle.name: angle for angle in angles}
         copy_lookup = {(copy.hook_text, copy.angle_name): copy for copy in ad_copies}
-        generated_lookup = {creative.concept_id: creative for creative in generated_creatives}
+        generated_lookup = {
+            creative.concept_id: creative
+            for creative in generated_creatives
+            if creative.status == CreativeStatus.GENERATED
+        }
         score_lookup = {score.concept_id: score for score in scored_creatives}
 
-        print(f"[DEBUG] Building assets: {len(visual_concepts)} concepts, {len(generated_creatives)} generated, {len(scored_creatives)} scored")
-        print(f"[DEBUG] Generated lookup keys: {list(generated_lookup.keys())[:3]}")
-        print(f"[DEBUG] Score lookup keys: {list(score_lookup.keys())[:3]}")
+        successful_count = len(generated_lookup)
+        failed_count = len(generated_creatives) - successful_count
+        print(f"[DEBUG] Building assets: {len(visual_concepts)} concepts, {len(generated_creatives)} generated ({successful_count} success, {failed_count} failed), {len(scored_creatives)} scored")
+        print(f"[DEBUG] Generated lookup keys: {list(generated_lookup.keys())[:5]}")
+        print(f"[DEBUG] Score lookup keys: {list(score_lookup.keys())[:5]}")
 
         assets: list[CreativeAsset] = []
         for concept in visual_concepts:
