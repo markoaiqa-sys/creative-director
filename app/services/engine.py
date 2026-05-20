@@ -69,7 +69,7 @@ class CreativeDirectorEngine:
         self._preview_generator = preview_generator
         self._exporter = exporter
         self._image_fallback_service = image_fallback_service
-        self._image_provider_timeout_seconds = 90.0
+        self._image_provider_timeout_seconds = 300.0
 
     async def generate_campaign(self, payload: CreativeInput) -> CampaignPackage:
         hooks_task = asyncio.create_task(self._hook_generator.generate(payload))
@@ -253,7 +253,10 @@ class CreativeDirectorEngine:
     async def _generate_images_with_timeout(self, coroutine):
         try:
             return await asyncio.wait_for(coroutine, timeout=self._image_provider_timeout_seconds)
-        except Exception:
+        except Exception as e:
+            import traceback
+            print(f"[ERROR] Image generation failed or timed out: {type(e).__name__}: {e}")
+            traceback.print_exc()
             return []
 
     @staticmethod
