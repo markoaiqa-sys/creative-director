@@ -126,7 +126,7 @@ class VertexAIClient:
         results: list[GeneratedCreative] = []
         for i, concept in enumerate(concepts):
             if i > 0:
-                delay = 10  # seconds between requests to respect quota
+                delay = 3  # seconds between requests to respect quota
                 print(f"[VERTEX_AI] Waiting {delay}s before generating image {i+1}/{len(concepts)}...")
                 await asyncio.sleep(delay)
             result = await self.generate_creative(concept, platform=platform, sample_images=sample_images)

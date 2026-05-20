@@ -69,7 +69,7 @@ class CreativeDirectorEngine:
         self._preview_generator = preview_generator
         self._exporter = exporter
         self._image_fallback_service = image_fallback_service
-        self._image_provider_timeout_seconds = 300.0
+        self._image_provider_timeout_seconds = 600.0
 
     async def generate_campaign(self, payload: CreativeInput) -> CampaignPackage:
         hooks_task = asyncio.create_task(self._hook_generator.generate(payload))
