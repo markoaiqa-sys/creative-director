@@ -169,37 +169,42 @@ class VertexAIClient:
                 ),
             )
 
-        try:
-            if self._provider == "gemini_image":
-                image_urls = await self._call_gemini_image_api(concept, sample_images=sample_images)
-            else:
-                image_urls = await self._call_imagen_api(concept, sample_images=sample_images)
-            if image_urls:
-                return GeneratedCreative(
-                    concept_id=concept.concept_id,
-                    provider="vertex-ai",
-                    provider_api_version=self._model_name,
-                    status=CreativeStatus.GENERATED,
-                    prompt=concept.generation_prompt,
-                    image_urls=image_urls,
-                    video_urls=[],
-                    raw_response={"urls": image_urls},
-                )
-            return GeneratedCreative(
-                concept_id=concept.concept_id,
-                provider="vertex-ai",
-                status=CreativeStatus.FAILED,
-                prompt=concept.generation_prompt,
-                error="No images returned from Vertex AI API",
-            )
-        except Exception as e:
-            return GeneratedCreative(
-                concept_id=concept.concept_id,
-                provider="vertex-ai",
-                status=CreativeStatus.FAILED,
-                prompt=concept.generation_prompt,
-                error=str(e),
-            )
+        max_attempts = 3
+        last_error = ""
+        for attempt in range(max_attempts):
+            try:
+                if self._provider == "gemini_image":
+                    image_urls = await self._call_gemini_image_api(concept, sample_images=sample_images)
+                else:
+                    image_urls = await self._call_imagen_api(concept, sample_images=sample_images)
+                if image_urls:
+                    return GeneratedCreative(
+                        concept_id=concept.concept_id,
+                        provider="vertex-ai",
+                        provider_api_version=self._model_name,
+                        status=CreativeStatus.GENERATED,
+                        prompt=concept.generation_prompt,
+                        image_urls=image_urls,
+                        video_urls=[],
+                        raw_response={"urls": image_urls},
+                    )
+                last_error = "No usable image bytes in response"
+                if attempt < max_attempts - 1:
+                    print(f"[VERTEX_AI] {concept.concept_id} attempt {attempt+1}: no image bytes, retrying in 5s...")
+                    await asyncio.sleep(5)
+            except Exception as e:
+                last_error = str(e)
+                if attempt < max_attempts - 1:
+                    print(f"[VERTEX_AI] {concept.concept_id} attempt {attempt+1} error: {e}, retrying in 5s...")
+                    await asyncio.sleep(5)
+
+        return GeneratedCreative(
+            concept_id=concept.concept_id,
+            provider="vertex-ai",
+            status=CreativeStatus.FAILED,
+            prompt=concept.generation_prompt,
+            error=f"Failed after {max_attempts} attempts: {last_error}",
+        )
 
     async def _call_gemini_image_api(self, concept: VisualConcept, sample_images: list[str] | None = None) -> list[str]:
         loop = asyncio.get_event_loop()

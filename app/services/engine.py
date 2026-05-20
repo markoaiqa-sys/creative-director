@@ -251,11 +251,12 @@ class CreativeDirectorEngine:
         return references
 
     async def _generate_images_with_timeout(self, coroutine):
+        """Await image generation. Per-image timeouts are handled in generate_batch."""
         try:
-            return await asyncio.wait_for(coroutine, timeout=self._image_provider_timeout_seconds)
+            return await coroutine
         except Exception as e:
             import traceback
-            print(f"[ERROR] Image generation failed or timed out: {type(e).__name__}: {e}")
+            print(f"[ERROR] Image generation batch failed: {type(e).__name__}: {e}")
             traceback.print_exc()
             return []
 
