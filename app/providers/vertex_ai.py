@@ -122,11 +122,17 @@ class VertexAIClient:
         platform: Platform,
         sample_images: list[str] | None = None,
     ) -> list[GeneratedCreative]:
-        tasks = [
-            self.generate_creative(concept, platform=platform, sample_images=sample_images)
-            for concept in concepts
-        ]
-        return await asyncio.gather(*tasks)
+        # Sequential generation with delay to avoid 429 RESOURCE_EXHAUSTED
+        results: list[GeneratedCreative] = []
+        for i, concept in enumerate(concepts):
+            if i > 0:
+                delay = 10  # seconds between requests to respect quota
+                print(f"[VERTEX_AI] Waiting {delay}s before generating image {i+1}/{len(concepts)}...")
+                await asyncio.sleep(delay)
+            result = await self.generate_creative(concept, platform=platform, sample_images=sample_images)
+            results.append(result)
+            print(f"[VERTEX_AI] Image {i+1}/{len(concepts)} status: {result.status.value}")
+        return results
 
     async def generate_creative(
         self,
@@ -266,23 +272,47 @@ class VertexAIClient:
                 print(f"[VERTEX_AI] Failed to include sample image for Gemini image mode: {exc}")
         if sample_images:
             print(f"[VERTEX_AI] Gemini image mode attached {attached_count}/{len(sample_images)} reference image(s)")
-        try:
-            return self._gemini_client.models.generate_content(
-                model=self._model_name,
-                contents=contents,
-                config={
-                    "response_modalities": ["IMAGE", "TEXT"],
-                    "image_config": {
-                        "aspect_ratio": self._get_vertex_aspect_ratio(concept.aspect_ratio),
-                    },
-                },
-            )
-        except Exception as exc:
-            print(f"[VERTEX_AI] Gemini image config failed, retrying without config: {exc}")
-            return self._gemini_client.models.generate_content(
-                model=self._model_name,
-                contents=contents,
-            )
+
+        config = {
+            "response_modalities": ["IMAGE", "TEXT"],
+            "image_config": {
+                "aspect_ratio": self._get_vertex_aspect_ratio(concept.aspect_ratio),
+            },
+        }
+
+        max_retries = 3
+        for attempt in range(max_retries + 1):
+            try:
+                return self._gemini_client.models.generate_content(
+                    model=self._model_name,
+                    contents=contents,
+                    config=config,
+                )
+            except Exception as exc:
+                error_str = str(exc)
+                is_rate_limit = "429" in error_str or "RESOURCE_EXHAUSTED" in error_str
+
+                if is_rate_limit and attempt < max_retries:
+                    wait_time = 15 * (2 ** attempt)  # 15s, 30s, 60s
+                    print(f"[VERTEX_AI] 429 rate limit on attempt {attempt+1}/{max_retries+1}, waiting {wait_time}s before retry...")
+                    import time
+                    time.sleep(wait_time)
+                    continue
+
+                if attempt == max_retries:
+                    print(f"[VERTEX_AI] All {max_retries+1} attempts failed: {exc}")
+                    # Last resort: try without config
+                    try:
+                        return self._gemini_client.models.generate_content(
+                            model=self._model_name,
+                            contents=contents,
+                        )
+                    except Exception as final_exc:
+                        print(f"[VERTEX_AI] Final fallback also failed: {final_exc}")
+                        raise final_exc
+
+                print(f"[VERTEX_AI] Non-retryable error: {exc}")
+                raise exc
 
     def _extract_gemini_image_bytes(self, response) -> list[bytes]:
         extracted: list[bytes] = []
