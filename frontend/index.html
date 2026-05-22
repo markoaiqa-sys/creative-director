@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="backend-url" content="">
   <title>Creative Director Engine</title>
-  <link rel="stylesheet" href="/styles.css?v=20260509">
-  <script src="/env-config.js?v=20260509"></script>
+  <link rel="stylesheet" href="/styles.css?v=20260522_4">
+  <script src="/env-config.js?v=20260522_4"></script>
 </head>
 <body>
   <main class="app-shell">
     <aside class="sidebar">
-      <div class="brand"><div class="brand-mark">M</div><div class="brand-name">Marko AI</div></div>
+      <div class="brand"><div class="brand-mark" style="background: transparent;"><img src="/frontend/IMG_20260420_033023.png" alt="M" style="width: 100%; height: 100%; object-fit: contain;"></div><div class="brand-name">Marko AI</div></div>
       <p class="nav-label">Orchestrator</p>
       <button class="nav-item active" id="supervisor-nav" type="button"><span class="nav-icon">SV</span><span>Supervisor</span></button>
       <p class="nav-label">Specialist Agents</p>
@@ -21,15 +21,15 @@
       <button class="nav-item specialist" data-agent-tab="copy" type="button"><span class="nav-icon">CA</span><span>Copy Architect</span></button>
       <button class="nav-item specialist" data-agent-tab="concepts" type="button"><span class="nav-icon">VP</span><span>Visual Planner</span></button>
       <p class="nav-label">Analysis</p>
-      <button class="nav-item" id="nav-execution-history" type="button"><span class="nav-icon">EX</span><span>Execution History</span></button>
-      <div class="user-row"><div class="user-avatar">CO</div><div><div class="user-name">Creative Ops</div><div class="user-role">Workspace</div></div></div>
+      <button class="nav-item" id="nav-execution-history" type="button"><span class="nav-icon">CH</span><span>Creative History</span></button>
+      <div class="user-row"><div class="user-avatar" style="background: #ffffff; color: #000000;">D</div><div><div class="user-name">Demo Client</div><div class="user-role">Pro Plan</div></div></div>
     </aside>
     <section class="main-panel">
       <div class="canvas">
         <section class="supervisor-panel" id="supervisor-panel">
           <div class="supervisor-header">
             <div class="supervisor-header-left">
-              <div class="supervisor-header-icon">
+              <div class="supervisor-header-icon" style="background: transparent; border: none; padding-right: 0;">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                   <line x1="18" y1="20" x2="18" y2="10"></line>
                   <line x1="12" y1="20" x2="12" y2="4"></line>
@@ -37,29 +37,27 @@
                 </svg>
               </div>
               <div class="supervisor-header-titles">
-                <h2>Performance Supervisor</h2>
+                <h2>Supervisor</h2>
                 <p>Orchestrator</p>
               </div>
             </div>
             <div class="supervisor-header-right">
               <button class="top-pill" id="sup-btn-kb" type="button">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 6px;"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>Knowledge Base
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>Knowledge Base
               </button>
               <button class="top-pill" type="button">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 6px;"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>Train Model
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>Train Model
               </button>
               <button class="top-pill" type="button">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 6px;"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>Run Analysis
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>Run Analysis
               </button>
             </div>
           </div>
           <div class="supervisor-centered">
-            <div class="supervisor-circle">
-              <div class="supervisor-bars">
-                <div class="bar bar-short"></div>
-                <div class="bar bar-med"></div>
-                <div class="bar bar-tall"></div>
-              </div>
+            <div class="supervisor-bars" style="margin-bottom: 24px;">
+              <div class="bar bar-short"></div>
+              <div class="bar bar-med"></div>
+              <div class="bar bar-tall"></div>
             </div>
             <h1 class="supervisor-title">I am your Creative Director Agent</h1>
             <p class="supervisor-desc">Specialized in ensuring your ads don't just reach people, but move them. Also develops hooks, emotional triggers, and ad copy.</p>
@@ -129,7 +127,7 @@
         </section>
         <section class="history-card hidden" id="history-panel">
           <header class="results-head">
-            <div><h2>Execution History</h2><p>Top generated creatives from past campaigns</p></div>
+            <div><h2>Creative History</h2><p>Top generated creatives from past campaigns</p></div>
           </header>
           <div id="history-output" class="stack" style="padding: 20px; overflow-y: auto;"></div>
         </section>
@@ -138,12 +136,8 @@
     <aside class="chat-panel">
       <header class="chat-header">
         <div class="assistant-head">
-          <div class="assistant-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 2a10 10 0 0 1 10 10c0 5.523-4.477 10-10 10S2 17.523 2 12A10 10 0 0 1 12 2z"></path>
-              <path d="M12 8v8"></path>
-              <path d="M8 12h8"></path>
-            </svg>
+          <div class="assistant-icon" style="background: transparent; border: none;">
+            <img src="/frontend/IMG_20260420_033023.png" alt="AI" style="width: 100%; height: 100%; object-fit: contain;">
           </div>
           <div class="chat-headings">
             <div class="chat-title">AI Assistant</div>
@@ -184,6 +178,7 @@
             <div class="chat-avatar">AI</div>
             <div class="chat-bubble">
               Hi! I am the Creative Director Assistant. I can help with hooks, angles, copy, concepts, and campaign strategy.
+              <br><br>💡 <b>Tip:</b> To generate an entire campaign from chat, start your prompt with: <code>Create ad creatives for [Brand]</code>
               <div class="meta">Assistant</div>
             </div>
             <div class="chat-time">Just now</div>
@@ -205,6 +200,10 @@
         </div>
       </div>
     </aside>
+    <!-- Floating button to reopen assistant -->
+    <button id="btn-chat-open" class="floating-chat-btn hidden" type="button" aria-label="Open Assistant">
+      <img src="/frontend/icon1-removebg-preview.png" alt="Chat" style="width: 24px; height: 24px; object-fit: contain;">
+    </button>
   </main>
   <div id="imageModal" class="image-modal hidden" onclick="if(event.target === this) closeImageModal()">
     <div class="image-modal-content">
@@ -221,6 +220,6 @@
       <div id="kb-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;max-height:60vh;overflow:auto;padding:6px;"></div>
     </div>
   </div>
-  <script defer src="/app.js?v=20260509"></script>
+  <script defer src="/app.js?v=20260522_4"></script>
 </body>
 </html>

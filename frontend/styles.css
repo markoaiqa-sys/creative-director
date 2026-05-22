@@ -34,6 +34,15 @@ button {
   min-height: 100vh;
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr) 360px;
+  transition: grid-template-columns 0.3s ease;
+}
+
+.app-shell.assistant-closed {
+  grid-template-columns: 240px minmax(0, 1fr) 0px;
+}
+
+.app-shell.assistant-closed .chat-panel {
+  display: none;
 }
 
 .sidebar {
@@ -614,7 +623,7 @@ button {
 .assistant-head {
   display: flex;
   gap: 10px;
-  align-items: flex-start;
+  align-items: center;
 }
 
 .assistant-icon {
@@ -1363,9 +1372,9 @@ button {
 }
 
 .supervisor-header-right .top-pill {
-  border: 1px solid #27272a;
-  background: #18181b;
-  color: #ffffff;
+  border: none !important;
+  background: transparent !important;
+  color: #ffffff !important;
   border-radius: 999px;
   min-height: 36px;
   padding: 0 14px;
@@ -1374,12 +1383,12 @@ button {
   cursor: pointer;
   display: inline-flex;
   align-items: center;
+  gap: 8px;
   transition: all 0.2s ease;
 }
 
 .supervisor-header-right .top-pill:hover {
-  background: #27272a;
-  border-color: #3f3f46;
+  color: #a1a1aa;
 }
 
 .supervisor-centered {
@@ -1625,9 +1634,8 @@ button {
 }
 
 .assistant-head .assistant-icon {
-  background: #18181b !important;
-  border: 1px solid #27272a !important;
-  color: #ffffff !important;
+  background: transparent !important;
+  border: none !important;
 }
 
 .chat-title {
@@ -1639,13 +1647,13 @@ button {
 }
 
 .icon-btn {
-  border: 1px solid #27272a !important;
-  background: #18181b !important;
+  border: none !important;
+  background: transparent !important;
   color: #ffffff !important;
 }
 
 .icon-btn:hover {
-  background: #27272a !important;
+  color: #a1a1aa !important;
 }
 
 .assistant-tabs {
@@ -1815,4 +1823,27 @@ button {
   cursor: wait;
 }
 
+.floating-chat-btn {
+  position: fixed;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #18181b;
+  border: 1px solid #27272a;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  z-index: 1000;
+  transition: all 0.2s ease;
+}
 
+.floating-chat-btn:hover {
+  background: #27272a;
+  border-color: #3f3f46;
+}

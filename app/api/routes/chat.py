@@ -280,3 +280,231 @@ async def get_execution_history(session_id: str):
     
     execution_history = chat_db.get_execution_history(session_id)
     return {"session_id": session_id, "execution_history": execution_history}
+
+
+# ---------------------------------------------------------------------------
+# Chatbot-driven campaign generation
+# ---------------------------------------------------------------------------
+
+CAMPAIGN_EXTRACT_SYSTEM = """You are Marko, an AI marketing assistant. Your job is to help users generate ad campaigns by extracting campaign parameters from their natural language messages.
+
+REQUIRED FIELDS (campaign cannot be generated without these):
+- brand_name: The brand or company name
+- product_description: What the product/service does (at least 10 chars)
+- target_audience: Who the ads target (at least 3 chars)
+- platform: One of "meta", "google", "tiktok" (default: "meta")
+- objective: One of "conversions", "traffic", "awareness" (default: "conversions")
+- tone: MUST be one of: "premium", "casual", "bold", "friendly", "urgent" (pick the closest match)
+- key_benefits: List of product benefits (at least 1 item)
+
+OPTIONAL FIELDS:
+- competitors: List of competitor brand names
+- visual_style: Description of desired visual style
+- brand_colors: List of hex colors
+- brand_fonts: List of font names
+- campaign_name: Custom campaign name
+
+INSTRUCTIONS:
+1. Analyze the ENTIRE conversation history to extract as many fields as possible.
+2. If ALL required fields can be determined from the conversation, respond with action "generate".
+3. If any required fields are still missing, respond with action "ask_details".
+4. Be smart about inferring fields — e.g. if user says "Zomato", you can infer product_description as "Online food delivery platform" and key_benefits as ["Fast delivery", "Wide restaurant selection", "Easy ordering"].
+5. For well-known brands, use your knowledge to fill in reasonable defaults.
+
+RESPOND WITH ONLY A JSON OBJECT in this exact format:
+{
+  "action": "generate" or "ask_details",
+  "reply": "Your conversational reply to the user",
+  "extracted": {
+    "brand_name": "...",
+    "product_description": "...",
+    "target_audience": "...",
+    "platform": "meta",
+    "objective": "conversions",
+    "tone": "...",
+    "key_benefits": ["..."],
+    "competitors": [],
+    "visual_style": "",
+    "brand_colors": [],
+    "brand_fonts": [],
+    "campaign_name": ""
+  },
+  "missing_fields": ["field1", "field2"]
+}
+
+If action is "ask_details", list specific missing fields in "missing_fields" and ask for them naturally in "reply".
+If action is "generate", "missing_fields" should be empty and "extracted" must have all required fields filled.
+Always include the "extracted" object with whatever you've gathered so far."""
+
+
+class ChatGenerateRequest(BaseModel):
+    message: str
+    context: dict | None = None
+    session_id: str | None = None
+
+
+class ChatGenerateResponse(BaseModel):
+    action: str  # "generate", "ask_details", or "chat"
+    reply: str
+    extracted: dict | None = None
+    missing_fields: list[str] = []
+    context: dict | None = None
+    session_id: str | None = None
+
+
+@router.post("/chat-generate", response_model=ChatGenerateResponse)
+async def chat_generate(request: ChatGenerateRequest):
+    """Chatbot endpoint that extracts campaign parameters and triggers generation."""
+    settings = get_settings()
+    from app.services.database import ChatDatabase
+    import uuid
+    import json as json_module
+
+    chat_db = ChatDatabase(settings)
+    session_id = request.session_id or str(uuid.uuid4())
+
+    context = request.context or {}
+    history = context.get("history", [])
+    accumulated = context.get("accumulated_params", {})
+
+    # Build messages for the LLM
+    messages = [{"role": "system", "content": CAMPAIGN_EXTRACT_SYSTEM}]
+
+    # Include conversation history
+    for entry in history[-10:]:
+        messages.append(entry)
+
+    # Add context about previously accumulated parameters
+    user_content = request.message
+    if accumulated:
+        user_content += f"\n\n[PREVIOUSLY EXTRACTED PARAMETERS: {json_module.dumps(accumulated)}]"
+
+    messages.append({"role": "user", "content": user_content})
+
+    reply_text = ""
+    parsed = None
+
+    # --- Try Groq first ---
+    if settings.groq_api_key:
+        try:
+            async with httpx.AsyncClient(timeout=settings.groq_timeout_seconds) as client:
+                response = await client.post(
+                    f"{settings.groq_base_url}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {settings.groq_api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": settings.groq_model,
+                        "messages": messages,
+                        "max_tokens": 1024,
+                        "temperature": 0.3,
+                        "response_format": {"type": "json_object"},
+                    },
+                )
+                if response.status_code != 429:
+                    response.raise_for_status()
+                    data = response.json()
+                    reply_text = data["choices"][0]["message"]["content"].strip()
+                    log.info("[CHAT-GEN] Groq responded OK")
+                else:
+                    log.warning("[CHAT-GEN] Groq 429, trying Gemini")
+        except Exception as exc:
+            log.warning(f"[CHAT-GEN] Groq failed: {exc}")
+
+    # --- Fall back to Gemini ---
+    if not reply_text and settings.gemini_api_key:
+        try:
+            gemini_messages = []
+            system_instruction = ""
+            for msg in messages:
+                if msg["role"] == "system":
+                    system_instruction = msg["content"]
+                elif msg["role"] == "user":
+                    gemini_messages.append({"role": "user", "parts": [{"text": msg["content"]}]})
+                elif msg["role"] == "assistant":
+                    gemini_messages.append({"role": "model", "parts": [{"text": msg["content"]}]})
+
+            async with httpx.AsyncClient(timeout=settings.groq_timeout_seconds) as client:
+                url = f"{settings.gemini_base_url}/{settings.gemini_model}:generateContent"
+                payload = {
+                    "contents": gemini_messages,
+                    "generationConfig": {
+                        "temperature": 0.3,
+                        "maxOutputTokens": 1024,
+                        "responseMimeType": "application/json",
+                    },
+                }
+                if system_instruction:
+                    payload["system_instruction"] = {"parts": [{"text": system_instruction}]}
+
+                response = await client.post(
+                    url,
+                    headers={"Content-Type": "application/json"},
+                    params={"key": settings.gemini_api_key},
+                    json=payload,
+                )
+                response.raise_for_status()
+                data = response.json()
+                reply_text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+                log.info("[CHAT-GEN] Gemini responded OK")
+        except Exception as exc:
+            log.warning(f"[CHAT-GEN] Gemini failed: {exc}")
+
+    # --- Parse JSON response ---
+    if reply_text:
+        try:
+            parsed = json_module.loads(reply_text)
+        except json_module.JSONDecodeError:
+            # Try to extract JSON from markdown code blocks
+            import re
+            json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', reply_text, re.DOTALL)
+            if json_match:
+                try:
+                    parsed = json_module.loads(json_match.group(1))
+                except Exception:
+                    pass
+
+    if not parsed:
+        # LLM failed — return a friendly fallback
+        return ChatGenerateResponse(
+            action="chat",
+            reply="I'd love to help you generate a campaign! Tell me about the brand, product, target audience, and preferred tone.",
+            context={"history": history + [
+                {"role": "user", "content": request.message},
+                {"role": "assistant", "content": "I'd love to help you generate a campaign! Tell me about the brand, product, target audience, and preferred tone."},
+            ]},
+            session_id=session_id,
+        )
+
+    action = parsed.get("action", "chat")
+    reply = parsed.get("reply", "")
+    extracted = parsed.get("extracted", {})
+    missing = parsed.get("missing_fields", [])
+
+    # Merge newly extracted params with previously accumulated ones
+    merged = {**accumulated}
+    for key, value in extracted.items():
+        if value and value != "" and value != []:
+            merged[key] = value
+
+    # Save chat messages
+    chat_db.save_message(session_id, "user", request.message)
+    chat_db.save_message(session_id, "assistant", reply)
+
+    new_history = history + [
+        {"role": "user", "content": request.message},
+        {"role": "assistant", "content": reply},
+    ]
+
+    return ChatGenerateResponse(
+        action=action,
+        reply=reply,
+        extracted=merged,
+        missing_fields=missing,
+        context={
+            "history": new_history,
+            "accumulated_params": merged,
+        },
+        session_id=session_id,
+    )

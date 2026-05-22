@@ -693,23 +693,131 @@ function renderAll(data) {
   });
 }
 
-function appendChat(role, text) {
+function appendChat(role, text, isHtml) {
   const row = document.createElement("div");
   row.className = "chat-row" + (role === "user" ? " user" : "");
-  row.innerHTML = `<div class="chat-avatar">${role === "user" ? "You" : "AI"}</div><div class="chat-bubble">${text}<div class="meta">${role === "user" ? "You" : "Assistant"}</div></div>`;
+  const content = isHtml ? text : esc(text);
+  row.innerHTML = `<div class="chat-avatar">${role === "user" ? "You" : "AI"}</div><div class="chat-bubble">${content}<div class="meta">${role === "user" ? "You" : "Assistant"}</div></div>`;
   chatBody.appendChild(row);
   chatBody.scrollTop = chatBody.scrollHeight;
+}
+
+/**
+ * Fill form fields visually from extracted campaign parameters.
+ */
+function fillFormFromExtracted(params) {
+  if (!params) return;
+
+  // Map LLM tone values to valid dropdown options
+  const toneMapping = {
+    premium: "premium", luxurious: "premium", elegant: "premium", sophisticated: "premium",
+    casual: "casual", relaxed: "casual", laid_back: "casual", conversational: "casual",
+    bold: "bold", strong: "bold", powerful: "bold", aggressive: "bold", edgy: "bold", modern: "bold",
+    friendly: "friendly", warm: "friendly", playful: "friendly", fun: "friendly", cheerful: "friendly", approachable: "friendly",
+    urgent: "urgent", fomo: "urgent", limited: "urgent", exclusive: "urgent",
+  };
+
+  const platformMapping = {
+    meta: "meta", facebook: "meta", instagram: "meta", fb: "meta",
+    google: "google", youtube: "google", search: "google",
+    tiktok: "tiktok", "tik tok": "tiktok",
+  };
+
+  const objectiveMapping = {
+    conversions: "conversions", sales: "conversions", purchase: "conversions", leads: "conversions",
+    traffic: "traffic", clicks: "traffic", visits: "traffic",
+    awareness: "awareness", reach: "awareness", branding: "awareness", brand: "awareness",
+  };
+
+  // Helper to set select value with fuzzy matching
+  function setSelectValue(elementId, value, mapping) {
+    const el = byId(elementId);
+    if (!el || !value) return;
+    const lower = value.toLowerCase().trim();
+    // Try exact match first
+    const options = Array.from(el.options).map(o => o.value);
+    if (options.includes(lower)) {
+      el.value = lower;
+    } else if (mapping[lower]) {
+      el.value = mapping[lower];
+    } else {
+      // Default to first option
+      el.value = options[0] || lower;
+    }
+    el.style.transition = "background-color 0.3s ease";
+    el.style.backgroundColor = "rgba(99, 102, 241, 0.2)";
+    setTimeout(() => { el.style.backgroundColor = ""; }, 1500);
+  }
+
+  // Text input fields
+  const textFieldMap = {
+    brand_name: "f-brand",
+    product_description: "f-desc",
+    target_audience: "f-audience",
+    visual_style: "f-visual",
+  };
+  for (const [key, elementId] of Object.entries(textFieldMap)) {
+    const el = byId(elementId);
+    if (el && params[key]) {
+      el.value = params[key];
+      el.style.transition = "background-color 0.3s ease";
+      el.style.backgroundColor = "rgba(99, 102, 241, 0.2)";
+      setTimeout(() => { el.style.backgroundColor = ""; }, 1500);
+    }
+  }
+
+  // Select/dropdown fields with fuzzy matching
+  if (params.platform) setSelectValue("f-platform", params.platform, platformMapping);
+  if (params.objective) setSelectValue("f-objective", params.objective, objectiveMapping);
+  if (params.tone) setSelectValue("f-tone", params.tone, toneMapping);
+
+  // Array fields (comma-separated)
+  const arrayFieldMap = {
+    key_benefits: "f-benefits",
+    competitors: "f-competitors",
+    brand_colors: "f-brand-colors",
+    brand_fonts: "f-brand-fonts",
+  };
+  for (const [key, elementId] of Object.entries(arrayFieldMap)) {
+    const el = byId(elementId);
+    if (el && params[key] && Array.isArray(params[key]) && params[key].length > 0) {
+      el.value = params[key].join(", ");
+      el.style.transition = "background-color 0.3s ease";
+      el.style.backgroundColor = "rgba(99, 102, 241, 0.2)";
+      setTimeout(() => { el.style.backgroundColor = ""; }, 1500);
+    }
+  }
+}
+
+/**
+ * Check if a message looks like a campaign generation request.
+ */
+function looksLikeCampaignRequest(message) {
+  const lower = message.toLowerCase().trim();
+  // Must be a clear command to generate a campaign
+  const campaignIntents = [
+    "generate ad", "create ad", "make ad", "build ad", "design ad",
+    "generate campaign", "create campaign", "make campaign",
+    "ad creatives for", "ad campaign for"
+  ];
+  return campaignIntents.some(intent => lower.includes(intent));
 }
 
 async function sendChatMessage() {
   const message = chatInput.value.trim();
   if (!message) return;
-  appendChat("user", esc(message));
+  appendChat("user", message);
   chatInput.value = "";
   chatSend.disabled = true;
 
   try {
-    const res = await fetch(`${API_BASE_URL}/chat-assistant`, {
+    // Determine if this looks like a campaign generation request
+    const isCampaignRequest = looksLikeCampaignRequest(message) ||
+      (chatContext && chatContext.accumulated_params && Object.keys(chatContext.accumulated_params).length > 0);
+
+    const endpoint = isCampaignRequest ? "/chat-generate" : "/chat-assistant";
+
+    const res = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message, context: chatContext, session_id: chatSessionId })
@@ -718,14 +826,81 @@ async function sendChatMessage() {
       throw new Error(await parseErrorResponse(res));
     }
     const data = await res.json();
-    appendChat("ai", esc(data.reply || "No response received."));
     chatContext = data.context || chatContext;
     if (data.session_id && data.session_id !== chatSessionId) {
       chatSessionId = data.session_id;
       localStorage.setItem("chat_session_id", chatSessionId);
     }
+
+    if (endpoint === "/chat-generate" && data.action === "generate" && data.extracted) {
+      // Step 1: Show the AI reply
+      appendChat("ai", data.reply);
+
+      // Step 2: Fill in form fields visually
+      fillFormFromExtracted(data.extracted);
+      appendChat("ai", "✅ <strong>Form fields filled!</strong> Review the inputs on the left, then I'll start generating...", true);
+
+      // Step 3: Scroll to the form briefly so user sees it filled
+      byId("f-brand")?.scrollIntoView({ behavior: "smooth", block: "center" });
+
+      // Step 4: Auto-trigger generation after a short delay
+      setTimeout(async () => {
+        appendChat("ai", "⏳ <strong>Generating campaign...</strong> This may take 2-3 minutes.", true);
+
+        try {
+          const payload = await buildPayload();
+          const validationErrors = validatePayload(payload);
+          if (validationErrors.length) {
+            appendChat("ai", `❌ Missing required fields: ${validationErrors.join(", ")}. Please fill them in and try again.`);
+            return;
+          }
+
+          resetOutputs();
+          showLoading();
+          setStatus("Generating final ad package via chatbot...");
+          heroGenerateButton.disabled = true;
+          heroGenerateButton.textContent = "Generating...";
+
+          const response = await fetch(`${API_BASE_URL}/generate-creatives`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+          const campaignData = await response.json();
+          if (!response.ok) throw new Error(typeof campaignData.detail === "string" ? campaignData.detail : JSON.stringify(campaignData.detail || campaignData));
+
+          renderAll(campaignData);
+          const assetCount = campaignData.creative_assets?.length || 0;
+          appendChat("ai", `🎉 <strong>Campaign generated!</strong> ${assetCount} creative${assetCount !== 1 ? 's' : ''} created. Check the <strong>Concepts</strong> tab to view them.`, true);
+
+          // Clear accumulated params for next conversation
+          if (chatContext) {
+            chatContext.accumulated_params = {};
+          }
+        } catch (genError) {
+          setStatus(genError.message || "Generation failed.", true);
+          showDashboard();
+          appendChat("ai", `❌ Generation failed: ${genError.message || "Unknown error"}. Please try again.`);
+        } finally {
+          heroGenerateButton.disabled = false;
+          heroGenerateButton.textContent = "Generate Final Ads";
+        }
+      }, 2000);
+
+    } else if (endpoint === "/chat-generate" && data.action === "ask_details") {
+      // Show the follow-up question and visually fill whatever was extracted so far
+      if (data.extracted) {
+        fillFormFromExtracted(data.extracted);
+      }
+      appendChat("ai", data.reply);
+
+    } else {
+      // Normal chat response
+      appendChat("ai", data.reply || "No response received.");
+    }
+
   } catch (error) {
-    appendChat("ai", esc(error.message || "Sorry, there was an error contacting the assistant."));
+    appendChat("ai", error.message || "Sorry, there was an error contacting the assistant.");
   } finally {
     chatSend.disabled = false;
   }
@@ -893,10 +1068,10 @@ async function buildPayload() {
     return num;
   };
 
-  const hook_count = validateCount(byId("f-hooks").value, 1, 10, 5);
+  const hook_count = validateCount(byId("f-hooks").value, 1, 10, 3);
   const angle_count = validateCount(byId("f-angles").value, 1, 10, 3);
-  const copy_count = validateCount(byId("f-copy").value, 1, 10, 5);
-  const concept_count = validateCount(byId("f-concepts").value, 1, 10, 5);
+  const copy_count = validateCount(byId("f-copy").value, 1, 10, 3);
+  const concept_count = validateCount(byId("f-concepts").value, 1, 10, 3);
 
   const rawSimilarity = Number.parseFloat(referenceSimilarityInput?.value ?? "0.5");
   const safeSimilarity = Number.isFinite(rawSimilarity)
@@ -1476,3 +1651,20 @@ wireEvents();
 loadUiConfig();
 loadChatHistory();
 showSupervisor();
+
+// Sidebar toggle logic
+const btnChatOpen = byId("btn-chat-open");
+const appShell = document.querySelector(".app-shell");
+
+if (btnChatClose && btnChatOpen && appShell) {
+  btnChatClose.addEventListener("click", () => {
+    appShell.classList.add("assistant-closed");
+    btnChatOpen.classList.remove("hidden");
+  });
+
+  btnChatOpen.addEventListener("click", () => {
+    appShell.classList.remove("assistant-closed");
+    btnChatOpen.classList.add("hidden");
+  });
+}
+

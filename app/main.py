@@ -97,7 +97,7 @@ async def frontend_config() -> FileResponse:
 
 @app.get("/")
 async def root() -> FileResponse:
-    return FileResponse(FRONTEND_DIR / "index.html")
+    return FileResponse(FRONTEND_DIR / "index.html", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 
 @app.get("/ui-config")
