@@ -95,6 +95,16 @@ async def frontend_app() -> FileResponse:
 async def frontend_config() -> FileResponse:
     return FileResponse(FRONTEND_DIR / "env-config.js", media_type="application/javascript")
 
+
+@app.get("/IMG_20260420_033023.png", include_in_schema=False)
+async def frontend_logo() -> FileResponse:
+    return FileResponse(FRONTEND_DIR / "IMG_20260420_033023.png", media_type="image/png")
+
+
+@app.get("/icon1-removebg-preview.png", include_in_schema=False)
+async def frontend_icon() -> FileResponse:
+    return FileResponse(FRONTEND_DIR / "icon1-removebg-preview.png", media_type="image/png")
+
 @app.get("/")
 async def root() -> FileResponse:
     return FileResponse(FRONTEND_DIR / "index.html", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
