@@ -37,7 +37,7 @@
 
   // 5. Production backend URL for Vercel-hosted frontend
   if (!backendUrl) {
-    backendUrl = "https://creative-director-z1j3.onrender.com";
+    backendUrl = "https://creative-director-x1js.onrender.com";
     console.log("[Config] Using production backend URL");
   }
 
