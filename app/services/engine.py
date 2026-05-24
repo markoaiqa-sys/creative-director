@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import inspect
 import io
 import re
@@ -9,7 +10,9 @@ from PIL import Image
 
 from app.core.config import Settings
 from app.models import (
+    AdCopy,
     CampaignPackage,
+    ConceptGenerationResponse,
     CreativeAsset,
     CreativeInput,
     CreativeStatus,
@@ -71,7 +74,7 @@ class CreativeDirectorEngine:
         self._image_fallback_service = image_fallback_service
         self._image_provider_timeout_seconds = 600.0
 
-    async def generate_campaign(self, payload: CreativeInput) -> CampaignPackage:
+    async def generate_concepts(self, payload: CreativeInput) -> ConceptGenerationResponse:
         hooks_task = asyncio.create_task(self._hook_generator.generate(payload))
         angles_task = asyncio.create_task(self._angle_generator.generate(payload))
         hooks, angles = await asyncio.gather(hooks_task, angles_task)
@@ -79,10 +82,18 @@ class CreativeDirectorEngine:
         ad_copies = await self._ad_copy_generator.generate(payload, hooks, angles)
         visual_concepts = await self._visual_concept_generator.generate(payload, hooks, angles, ad_copies)
 
-        generated_creatives = []
+        return ConceptGenerationResponse(
+            hooks=hooks,
+            angles=angles,
+            ad_copies=ad_copies,
+            visual_concepts=visual_concepts,
+        )
+
+    async def generate_single_image(self, payload: CreativeInput, concept: VisualConcept) -> GeneratedCreative:
         has_reference_images = bool(payload.sample_images)
         generation_references = self._build_generation_references(payload)
         has_generation_references = bool(generation_references)
+        
         vertex_client_obj = self._vertex_client
         vertex_provider = (getattr(vertex_client_obj, "_provider", "imagen") if vertex_client_obj else "imagen")
         vertex_runtime_client = (
@@ -97,24 +108,28 @@ class CreativeDirectorEngine:
         )
         hf_ready = bool(self._hf_client and getattr(self._hf_client, "_api_key", None))
 
+        generated_creative = None
+
         if vertex_ready:
-            print(f"[INFO] Using Vertex AI with {len(visual_concepts)} creatives")
-            generated_creatives = await self._generate_images_with_timeout(
+            print(f"[INFO] Using Vertex AI for concept {concept.concept_id}")
+            results = await self._generate_images_with_timeout(
                 self._vertex_client.generate_batch(
-                    visual_concepts,
+                    [concept],
                     platform=payload.platform,
                     sample_images=generation_references,
                 )
             )
+            if results: generated_creative = results[0]
         elif has_generation_references and hf_ready:
-            print(f"[INFO] Using HuggingFace with {len(visual_concepts)} creatives")
-            generated_creatives = await self._generate_images_with_timeout(
+            print(f"[INFO] Using HuggingFace for concept {concept.concept_id}")
+            results = await self._generate_images_with_timeout(
                 self._hf_client.generate_batch(
-                    visual_concepts,
+                    [concept],
                     platform=payload.platform,
                     sample_images=generation_references,
                 )
             )
+            if results: generated_creative = results[0]
         elif has_generation_references:
             print(
                 "[WARNING] No image provider available for reference images. "
@@ -123,49 +138,62 @@ class CreativeDirectorEngine:
 
         if (
             not has_reference_images
-            and (not generated_creatives or any(c.status in (CreativeStatus.FAILED, CreativeStatus.SKIPPED) for c in generated_creatives))
+            and (not generated_creative or generated_creative.status in (CreativeStatus.FAILED, CreativeStatus.SKIPPED))
             and self._nanobanana_client
             and self._has_real_api_key(getattr(self._nanobanana_client, "_api_key", None))
         ):
-            fallback_creatives = await self._generate_images_with_timeout(
+            results = await self._generate_images_with_timeout(
                 self._nanobanana_client.generate_batch(
-                    visual_concepts,
+                    [concept],
                     platform=payload.platform,
                     sample_images=generation_references,
                 )
             )
-            if fallback_creatives:
-                generated_creatives = fallback_creatives
+            if results: generated_creative = results[0]
 
         if (
             not has_reference_images
-            and (not generated_creatives or any(c.status in (CreativeStatus.FAILED, CreativeStatus.SKIPPED) for c in generated_creatives))
+            and (not generated_creative or generated_creative.status in (CreativeStatus.FAILED, CreativeStatus.SKIPPED))
             and getattr(self, "_hf_client", None)
             and getattr(self._hf_client, "_api_key", None)
         ):
-            fallback_creatives = await self._generate_images_with_timeout(
+            results = await self._generate_images_with_timeout(
                 self._hf_client.generate_batch(
-                    visual_concepts,
+                    [concept],
                     platform=payload.platform,
                     sample_images=generation_references,
                 )
             )
-            if fallback_creatives:
-                generated_creatives = fallback_creatives
+            if results: generated_creative = results[0]
 
-        if has_generation_references and not generated_creatives:
-            print("[WARN] Sample images were provided, but no reference-image provider is configured. Reference images were not used.")
-
-        if not generated_creatives:
-            generated_creatives = []
-
-        if self._image_fallback_service and not has_reference_images:
-            generated_creatives = self._image_fallback_service.generate_batch(
+        if not generated_creative and self._image_fallback_service and not has_reference_images:
+            results = self._image_fallback_service.generate_batch(
                 payload=payload,
-                concepts=visual_concepts,
-                existing=generated_creatives,
+                concepts=[concept],
+                existing=[],
             )
+            if results: generated_creative = results[0]
 
+        if not generated_creative:
+            generated_creative = GeneratedCreative(
+                concept_id=concept.concept_id,
+                provider="unknown",
+                status=CreativeStatus.FAILED,
+                prompt=concept.generation_prompt,
+                error="No provider available or generation timed out",
+            )
+            
+        return generated_creative
+
+    async def score_and_package(
+        self,
+        payload: CreativeInput,
+        hooks: list[Hook],
+        angles: list[MessagingAngle],
+        ad_copies: list[AdCopy],
+        visual_concepts: list[VisualConcept],
+        generated_creatives: list[GeneratedCreative],
+    ) -> CampaignPackage:
         scored_creatives = await self._scoring_service.score(
             payload,
             visual_concepts,
@@ -236,6 +264,24 @@ class CreativeDirectorEngine:
 
         return package
 
+    async def generate_campaign(self, payload: CreativeInput) -> CampaignPackage:
+        concepts_resp = await self.generate_concepts(payload)
+        
+        # Sequentially generate images
+        generated_creatives = []
+        for concept in concepts_resp.visual_concepts:
+            img = await self.generate_single_image(payload, concept)
+            generated_creatives.append(img)
+            
+        return await self.score_and_package(
+            payload=payload,
+            hooks=concepts_resp.hooks,
+            angles=concepts_resp.angles,
+            ad_copies=concepts_resp.ad_copies,
+            visual_concepts=concepts_resp.visual_concepts,
+            generated_creatives=generated_creatives,
+        )
+
     @staticmethod
     def _build_generation_references(payload: CreativeInput) -> list[str]:
         references: list[str] = []
@@ -293,9 +339,11 @@ class CreativeDirectorEngine:
                 output_path = rendered_dir / f"{asset.concept_id}.png"
                 image.save(output_path, format="PNG", optimize=True)
 
+                image_base64 = base64.b64encode(image_bytes).decode("utf-8")
                 rendered_ad = RenderedAd(
                     concept_id=asset.concept_id,
                     image_path=str(output_path),
+                    image_base64=f"data:image/png;base64,{image_base64}",
                     width=image.width,
                     height=image.height,
                     headline_lines=[asset.headline or asset.hook_text],
@@ -309,6 +357,14 @@ class CreativeDirectorEngine:
                     if self._preview_generator
                     else None
                 )
+                if preview and preview.image_path:
+                    try:
+                        with open(preview.image_path, "rb") as f:
+                            preview_b64 = base64.b64encode(f.read()).decode("utf-8")
+                            preview.image_base64 = f"data:image/png;base64,{preview_b64}"
+                    except Exception as e:
+                        print(f"[WARN] Failed to base64 encode preview: {e}")
+                        
                 rendered_assets.append(asset.model_copy(update={"rendered_ad": rendered_ad, "preview": preview}))
             except Exception as exc:
                 print(f"[WARN] Failed to save generated final ad for {asset.concept_id}: {type(exc).__name__}: {exc}")
@@ -317,9 +373,13 @@ class CreativeDirectorEngine:
         return rendered_assets
 
     def get_top_creatives(self, *, limit: int | None, platform: Platform | None):
+        if self._database:
+            return self._database.get_top_creatives(limit=limit, platform=platform)
         return self._storage.get_top_creatives(limit=limit, platform=platform)
 
     def get_campaign_history(self, *, limit: int | None, platform: Platform | None):
+        if self._database:
+            return self._database.get_campaign_history(limit=limit, platform=platform)
         return self._storage.get_campaign_history(limit=limit, platform=platform)
 
 

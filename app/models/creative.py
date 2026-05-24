@@ -284,3 +284,24 @@ class CampaignHistoryItem(BaseModel):
 
 class CampaignHistoryResponse(BaseModel):
     items: list[CampaignHistoryItem]
+
+
+class ConceptGenerationResponse(BaseModel):
+    hooks: list[Hook]
+    angles: list[MessagingAngle]
+    ad_copies: list[AdCopy]
+    visual_concepts: list[VisualConcept]
+
+
+class ImageGenerationRequest(BaseModel):
+    payload: CreativeInput
+    concept: VisualConcept
+
+
+class ScoringRequest(BaseModel):
+    payload: CreativeInput
+    hooks: list[Hook]
+    angles: list[MessagingAngle]
+    ad_copies: list[AdCopy]
+    visual_concepts: list[VisualConcept]
+    generated_creatives: list[GeneratedCreative]

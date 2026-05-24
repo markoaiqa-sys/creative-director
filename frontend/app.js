@@ -861,13 +861,7 @@ async function sendChatMessage() {
           heroGenerateButton.disabled = true;
           heroGenerateButton.textContent = "Generating...";
 
-          const response = await fetch(`${API_BASE_URL}/generate-creatives`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-          });
-          const campaignData = await response.json();
-          if (!response.ok) throw new Error(typeof campaignData.detail === "string" ? campaignData.detail : JSON.stringify(campaignData.detail || campaignData));
+          const campaignData = await executeCampaignPipeline(payload);
 
           renderAll(campaignData);
           const assetCount = campaignData.creative_assets?.length || 0;
@@ -1146,6 +1140,113 @@ async function buildPayload() {
   return payload;
 }
 
+async function executeCampaignPipeline(payload) {
+  // If user uploaded sample files, save them to knowledge base first
+  if (selectedSampleFiles.length) {
+    const files = selectedSampleFiles.slice(0, MAX_SAMPLE_IMAGES);
+    for (const f of files) {
+      try {
+        const fd = new FormData();
+        fd.append("file", f, f.name);
+        fd.append("title", `${byId("f-brand").value || "sample"} - ${f.name}`);
+        await fetch(`${API_BASE_URL}/knowledge-base/images`, { method: "POST", body: fd });
+      } catch (e) {
+        console.warn("KB upload failed", e);
+      }
+    }
+  }
+
+  // STEP 1: Generate Concepts
+  setStatus("Generating concepts (hooks, angles, copies)...");
+  const conceptsResponse = await fetch(`${API_BASE_URL}/generate-concepts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  const conceptsData = await conceptsResponse.json();
+  if (!conceptsResponse.ok) throw new Error(conceptsData.detail || "Failed to generate concepts");
+
+  const topConcepts = conceptsData.visual_concepts.slice(0, 3); // Hard limit to 3
+
+  showResults();
+  activateTab("finals");
+  finalsOutput.innerHTML = "";
+  setStatus("Concepts generated! Rendering images sequentially...");
+
+  // STEP 2: Generate Images Sequentially
+  const generated_creatives = [];
+  for (let i = 0; i < topConcepts.length; i++) {
+    const concept = topConcepts[i];
+    setStatus(`Generating Image ${i + 1} of ${topConcepts.length}...`);
+
+    const imageReq = {
+      payload: payload,
+      concept: concept
+    };
+
+    const imageResponse = await fetch(`${API_BASE_URL}/generate-image`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(imageReq)
+    });
+    const imageData = await imageResponse.json();
+    if (!imageResponse.ok) {
+      console.error(`Image ${i + 1} failed`, imageData);
+      // push an empty/failed creative so scoring doesn't break
+      generated_creatives.push({
+         concept_id: concept.concept_id,
+         provider: "unknown",
+         status: "failed",
+         prompt: concept.generation_prompt,
+         error: "Failed to generate image"
+      });
+      continue;
+    }
+
+    generated_creatives.push(imageData);
+
+    // Display partial card
+    if (imageData.image_urls && imageData.image_urls.length > 0) {
+      const tempCard = document.createElement("div");
+      tempCard.className = "card card-creative";
+      tempCard.innerHTML = `
+         <div class="card-status-bar" style="background-color: #f5a623; color: white;">Scoring...</div>
+         <div class="creative-image-container">
+             <img src="${toPublicAssetUrl(imageData.image_urls[0])}" class="creative-image" alt="Generating...">
+         </div>
+         <div class="creative-content">
+             <h3 class="creative-headline" style="color: #888;">Evaluating Text...</h3>
+             <div class="score-meta">
+                 <span class="meta-pill" style="opacity: 0.6;">Awaiting Score</span>
+             </div>
+         </div>
+      `;
+      finalsOutput.appendChild(tempCard);
+    }
+  }
+
+  // STEP 3: Score and Package
+  setStatus("All images generated! Running AI Scoring and Final Assembly...");
+  const scoreReq = {
+    payload: payload,
+    hooks: conceptsData.hooks,
+    angles: conceptsData.angles,
+    ad_copies: conceptsData.ad_copies,
+    visual_concepts: topConcepts,
+    generated_creatives: generated_creatives
+  };
+
+  const scoreResponse = await fetch(`${API_BASE_URL}/score-and-package`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(scoreReq)
+  });
+  const scoreData = await scoreResponse.json();
+  if (!scoreResponse.ok) throw new Error(scoreData.detail || "Scoring failed");
+
+  return scoreData;
+}
+
 function wireEvents() {
   if (referenceSimilarityInput && referenceSimilarityValue) {
     const syncReferenceSimilarityValue = () => {
@@ -1340,6 +1441,8 @@ function wireEvents() {
     });
   }
 
+
+
   heroGenerateButton.addEventListener("click", async () => {
     const payload = await buildPayload();
     const validationErrors = validatePayload(payload);
@@ -1355,34 +1458,12 @@ function wireEvents() {
     heroGenerateButton.disabled = true;
     heroGenerateButton.textContent = "Generating...";
 
-    try {
-        // If user uploaded sample files, save them to knowledge base first
-        if (selectedSampleFiles.length) {
-          const files = selectedSampleFiles.slice(0, MAX_SAMPLE_IMAGES);
-          for (const f of files) {
-            try {
-              const fd = new FormData();
-              fd.append("file", f, f.name);
-              fd.append("title", `${byId("f-brand").value || "sample"} - ${f.name}`);
-              await fetch(`${API_BASE_URL}/knowledge-base/images`, { method: "POST", body: fd });
-            } catch (e) {
-              console.warn("KB upload failed", e);
-            }
-          }
-        }
-
-        const response = await fetch(`${API_BASE_URL}/generate-creatives`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail || data));
-      renderAll(data);
-      // Keep status focused on user outcome instead of provider diagnostics.
-    } catch (error) {
-      setStatus(error.message || "Generation failed.", true);
-      showDashboard();
+      try {
+        const scoreData = await executeCampaignPipeline(payload);
+        renderAll(scoreData);
+      } catch (error) {
+        setStatus(error.message || "Generation failed.", true);
+        showDashboard();
     } finally {
       heroGenerateButton.disabled = false;
       heroGenerateButton.textContent = "Generate Final Ads";

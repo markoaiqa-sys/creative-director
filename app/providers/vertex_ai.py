@@ -122,32 +122,26 @@ class VertexAIClient:
         platform: Platform,
         sample_images: list[str] | None = None,
     ) -> list[GeneratedCreative]:
-        # Sequential generation — each image has its own error handling
-        # so partial results are preserved if one image fails/times out
-        results: list[GeneratedCreative] = []
-        per_image_timeout = 180  # 3 minutes max per image
-        for i, concept in enumerate(concepts):
-            if i > 0:
-                delay = 3
-                print(f"[VERTEX_AI] Waiting {delay}s before generating image {i+1}/{len(concepts)}...")
-                await asyncio.sleep(delay)
+        per_image_timeout = 180
+        
+        async def _generate_with_timeout(concept: VisualConcept) -> GeneratedCreative:
             try:
-                result = await asyncio.wait_for(
+                return await asyncio.wait_for(
                     self.generate_creative(concept, platform=platform, sample_images=sample_images),
                     timeout=per_image_timeout,
                 )
             except Exception as e:
-                print(f"[VERTEX_AI] Image {i+1}/{len(concepts)} failed: {type(e).__name__}: {e}")
-                result = GeneratedCreative(
+                print(f"[VERTEX_AI] Image failed: {type(e).__name__}: {e}")
+                return GeneratedCreative(
                     concept_id=concept.concept_id,
                     provider="vertex-ai",
                     status=CreativeStatus.FAILED,
                     prompt=concept.generation_prompt,
                     error=f"Per-image timeout/error: {type(e).__name__}: {e}",
                 )
-            results.append(result)
-            print(f"[VERTEX_AI] Image {i+1}/{len(concepts)} status: {result.status.value}")
-        return results
+
+        tasks = [_generate_with_timeout(concept) for concept in concepts]
+        return list(await asyncio.gather(*tasks))
 
     async def generate_creative(
         self,
@@ -169,7 +163,7 @@ class VertexAIClient:
                 ),
             )
 
-        max_attempts = 3
+        max_attempts = 2
         last_error = ""
         for attempt in range(max_attempts):
             try:

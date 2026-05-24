@@ -6,7 +6,14 @@ from contextlib import contextmanager
 
 from app.core.config import Settings
 from app.core.supabase import DatabasePool
-from app.models import CampaignPackage
+from app.models import (
+    CampaignPackage,
+    Platform,
+    TopCreativeItem,
+    TopCreativesResponse,
+    CampaignHistoryItem,
+    CampaignHistoryResponse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,15 +44,11 @@ class ChatDatabase(BaseDatabase):
         with self._cursor() as cur:
             if cur is None:
                 return
-            # Drop and recreate tables to ensure correct schema
-            cur.execute("DROP TABLE IF EXISTS execution_history CASCADE;")
-            cur.execute("DROP TABLE IF EXISTS knowledge_base CASCADE;")
-            cur.execute("DROP TABLE IF EXISTS chat_messages CASCADE;")
-            cur.execute("DROP TABLE IF EXISTS chat_sessions CASCADE;")
+            # Do not drop tables to preserve data!
             
             cur.execute(
                 """
-                CREATE TABLE chat_sessions (
+                CREATE TABLE IF NOT EXISTS chat_sessions (
                     id VARCHAR(255) PRIMARY KEY,
                     title TEXT,
                     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -55,20 +58,20 @@ class ChatDatabase(BaseDatabase):
             
             cur.execute(
                 """
-                CREATE TABLE chat_messages (
+                CREATE TABLE IF NOT EXISTS chat_messages (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                     session_id VARCHAR(255) NOT NULL,
                     role VARCHAR(50) NOT NULL,
                     content TEXT NOT NULL,
                     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (session_id) REFERENCES chat_sessions(id)
+                    FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
                 );
                 """
             )
             
             cur.execute(
                 """
-                CREATE TABLE knowledge_base (
+                CREATE TABLE IF NOT EXISTS knowledge_base (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                     session_id VARCHAR(255),
                     file_name TEXT NOT NULL,
@@ -77,14 +80,14 @@ class ChatDatabase(BaseDatabase):
                     file_content TEXT,
                     metadata JSONB,
                     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (session_id) REFERENCES chat_sessions(id)
+                    FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
                 );
                 """
             )
             
             cur.execute(
                 """
-                CREATE TABLE execution_history (
+                CREATE TABLE IF NOT EXISTS execution_history (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                     session_id VARCHAR(255),
                     campaign_name TEXT,
@@ -94,11 +97,21 @@ class ChatDatabase(BaseDatabase):
                     status VARCHAR(50),
                     error_message TEXT,
                     execution_time_ms INTEGER,
-                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (session_id) REFERENCES chat_sessions(id)
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
                 );
                 """
             )
+            
+            # Drop foreign key if it previously existed so we can save anonymous sessions
+            try:
+                cur.execute(
+                    """
+                    ALTER TABLE execution_history
+                    DROP CONSTRAINT IF EXISTS execution_history_session_id_fkey;
+                    """
+                )
+            except Exception as e:
+                logger.warning(f"Failed to drop constraint (might not exist): {e}")
             
             cur.execute(
                 """
@@ -375,3 +388,159 @@ class CampaignDatabase(BaseDatabase):
             except Exception as exc:
                 logger.exception("Database fetch error: %s", exc)
                 return []
+
+    def get_campaign_history(self, limit: int | None = None, platform: Platform | None = None) -> CampaignHistoryResponse:
+        with self._cursor() as cur:
+            if cur is None:
+                return CampaignHistoryResponse(items=[])
+            
+            try:
+                query = """
+                    SELECT campaign_name, campaign_slug, platform, objective, created_at,
+                           hooks, angles, visual_concepts, creative_assets
+                    FROM creative_campaigns
+                """
+                params = []
+                if platform:
+                    query += " WHERE platform = %s "
+                    params.append(platform.value)
+                query += " ORDER BY created_at DESC "
+                
+                cur.execute(query, tuple(params))
+                
+                campaign_data: dict[str, dict] = {}
+                for row in cur.fetchall():
+                    c_name, c_slug, c_plat, c_obj, c_created, hooks_str, angles_str, concepts_str, assets_str = row
+                    if not c_slug: continue
+                    
+                    # psycopg2 automatically deserializes JSONB
+                    hooks = hooks_str if isinstance(hooks_str, list) else (json.loads(hooks_str) if hooks_str else [])
+                    angles = angles_str if isinstance(angles_str, list) else (json.loads(angles_str) if angles_str else [])
+                    concepts = concepts_str if isinstance(concepts_str, list) else (json.loads(concepts_str) if concepts_str else [])
+                    assets = assets_str if isinstance(assets_str, list) else (json.loads(assets_str) if assets_str else [])
+                    
+                    creatives = []
+                    top_score = 0
+                    for asset in assets:
+                        score = asset.get("score", {}).get("total_score", 0)
+                        if score > top_score:
+                            top_score = score
+                        
+                        rendered_ad = asset.get("rendered_ad") or {}
+                        preview = asset.get("preview") or {}
+                        
+                        creatives.append({
+                            "concept_id": asset.get("concept_id"),
+                            "primary_text": asset.get("primary_text"),
+                            "headline": asset.get("headline"),
+                            "description": asset.get("description"),
+                            "cta": asset.get("cta"),
+                            "score": score,
+                            "rendered_image_path": rendered_ad.get("image_base64") or rendered_ad.get("image_path"),
+                            "preview_image_path": preview.get("image_base64") or preview.get("image_path"),
+                        })
+                    
+                    if c_slug in campaign_data:
+                        existing = campaign_data[c_slug]
+                        existing_concept_ids = {c["concept_id"] for c in existing["creatives"]}
+                        new_creatives = [c for c in creatives if c["concept_id"] not in existing_concept_ids]
+                        existing["creatives"].extend(new_creatives)
+                        if top_score > existing["top_score"]:
+                            existing["top_score"] = top_score
+                    else:
+                        campaign_data[c_slug] = {
+                            "campaign_name": c_name,
+                            "campaign_slug": c_slug,
+                            "created_at": c_created.isoformat() if c_created else "",
+                            "platform": c_plat,
+                            "objective": c_obj,
+                            "top_score": top_score,
+                            "hooks": hooks,
+                            "angles": angles,
+                            "visual_concepts": concepts,
+                            "creatives": creatives,
+                            "output_directory": "",
+                        }
+                
+                items = [
+                    CampaignHistoryItem(
+                        campaign_name=data["campaign_name"],
+                        campaign_slug=data["campaign_slug"],
+                        created_at=data["created_at"],
+                        platform=data["platform"],
+                        objective=data["objective"],
+                        top_score=data["top_score"],
+                        total_creatives=len(data["creatives"]),
+                        hooks=data["hooks"],
+                        angles=data["angles"],
+                        visual_concepts=data["visual_concepts"],
+                        creatives=data["creatives"],
+                        output_directory=data["output_directory"],
+                    )
+                    for data in sorted(campaign_data.values(), key=lambda x: x["top_score"], reverse=True)
+                ]
+                
+                if limit is not None:
+                    items = items[:limit]
+                    
+                return CampaignHistoryResponse(items=items)
+            except Exception as exc:
+                logger.exception("Database fetch error: %s", exc)
+                return CampaignHistoryResponse(items=[])
+
+    def get_top_creatives(self, limit: int | None = None, platform: Platform | None = None) -> TopCreativesResponse:
+        with self._cursor() as cur:
+            if cur is None:
+                return TopCreativesResponse(items=[])
+            
+            try:
+                query = "SELECT campaign_name, campaign_slug, platform, creative_assets FROM creative_campaigns"
+                params = []
+                if platform:
+                    query += " WHERE platform = %s "
+                    params.append(platform.value)
+                
+                cur.execute(query, tuple(params))
+                
+                all_creatives = []
+                for row in cur.fetchall():
+                    c_name, c_slug, c_plat, assets_str = row
+                    assets = assets_str if isinstance(assets_str, list) else (json.loads(assets_str) if assets_str else [])
+                    
+                    for asset in assets:
+                        score = asset.get("score", {}).get("total_score", 0)
+                        rendered_ad = asset.get("rendered_ad") or {}
+                        preview = asset.get("preview") or {}
+                        generated = asset.get("generated_creative") or {}
+                        
+                        all_creatives.append(
+                            TopCreativeItem(
+                                campaign_name=c_name,
+                                campaign_slug=c_slug,
+                                platform=c_plat,
+                                concept_id=asset.get("concept_id"),
+                                total_score=score,
+                                primary_text=asset.get("primary_text"),
+                                headline=asset.get("headline"),
+                                description=asset.get("description"),
+                                cta=asset.get("cta"),
+                                image_urls=generated.get("image_urls", []),
+                                video_urls=generated.get("video_urls", []),
+                                rendered_image_path=rendered_ad.get("image_path"),
+                                preview_image_path=preview.get("image_path"),
+                                rendered_image_base64=rendered_ad.get("image_base64"),
+                                preview_image_base64=preview.get("image_base64"),
+                                output_directory="",
+                            )
+                        )
+                
+                # Sort by score descending
+                all_creatives.sort(key=lambda x: x.total_score, reverse=True)
+                
+                if limit is not None:
+                    all_creatives = all_creatives[:limit]
+                    
+                return TopCreativesResponse(items=all_creatives)
+            except Exception as exc:
+                logger.exception("Database fetch error: %s", exc)
+                return TopCreativesResponse(items=[])
