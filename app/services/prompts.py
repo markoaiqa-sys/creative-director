@@ -29,7 +29,7 @@ CREATIVE_SYSTEM_PROMPT = (
 def brand_context(payload: CreativeInput) -> str:
     brand_colors = ", ".join(payload.brand_colors) if payload.brand_colors else "Not specified"
     logo_hint = "Logo is provided and must be used" if payload.logo_image else "Not provided"
-    return (
+    context = (
         f"Brand: {payload.brand_name}\n"
         f"Product: {payload.product_description}\n"
         f"Audience: {payload.target_audience}\n"
@@ -42,6 +42,9 @@ def brand_context(payload: CreativeInput) -> str:
         f"Brand colors (must prioritize): {brand_colors}\n"
         f"Logo reference: {logo_hint}"
     )
+    if payload.extra_details:
+        context += f"\nCRITICAL EXTRA INSTRUCTIONS: {payload.extra_details} (MUST BE GIVEN EQUAL WEIGHTAGE AS ALL OTHER FIELDS)"
+    return context
 
 
 def serialize_models(items: Iterable[object]) -> str:

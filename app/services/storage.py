@@ -1,8 +1,11 @@
 import json
+import logging
 from datetime import UTC, datetime
 from importlib import import_module
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 try:
     boto3 = import_module("boto3")
@@ -15,6 +18,7 @@ from app.models import CampaignPackage, Platform, TopCreativeItem, TopCreativesR
 
 class CampaignStorage:
     def __init__(self, settings: Settings) -> None:
+        self._settings = settings
         self._output_root = settings.output_root
         self._output_root.mkdir(parents=True, exist_ok=True)
         self._kb_root = self._output_root / "knowledge_base"
@@ -25,6 +29,8 @@ class CampaignStorage:
             if settings.s3_bucket_name and boto3 is not None
             else None
         )
+        from app.core.supabase import DatabasePool
+        self._pool = DatabasePool(settings)
 
     def save_package(self, package: CampaignPackage) -> str:
         campaign_dir = self.build_campaign_dir(package.campaign_slug, package.created_at)
@@ -53,6 +59,8 @@ class CampaignStorage:
             file_path = campaign_dir / filename
             self._write_json(file_path, payload)
             self._mirror_to_s3(file_path=file_path, relative_key=file_path.relative_to(self._output_root))
+
+        self.sync_campaign_dir_to_db(campaign_dir)
 
         return str(campaign_dir)
 
@@ -316,6 +324,14 @@ class CampaignStorage:
         except Exception:
             pass
 
+        # Sync to DB
+        try:
+            rel_path = path.relative_to(self._output_root).as_posix()
+            mime = "image/jpeg" if filename.lower().endswith((".jpg", ".jpeg")) else "image/png"
+            self.save_file_to_db(rel_path, data, mime)
+        except Exception as e:
+            logger.error(f"Failed to sync KB image to DB: {e}")
+
         return entry
 
     def list_kb_images(self) -> list[dict]:
@@ -324,3 +340,88 @@ class CampaignStorage:
             return json.loads(meta_path.read_text(encoding="utf-8"))
         except Exception:
             return []
+
+    def delete_kb_image(self, image_id: str) -> bool:
+        meta_path = self._kb_root / "metadata.json"
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        except Exception:
+            return False
+            
+        updated_meta = []
+        found = False
+        for entry in meta:
+            if entry.get("id") == image_id:
+                found = True
+                filename = entry.get("filename")
+                if filename:
+                    file_path = self._kb_root / filename
+                    if file_path.exists():
+                        try:
+                            file_path.unlink()
+                        except Exception as e:
+                            logger.error(f"Failed to delete kb image {file_path}: {e}")
+                    # Delete from DB
+                    try:
+                        rel_path = file_path.relative_to(self._output_root).as_posix()
+                        self.delete_file_from_db(rel_path)
+                    except Exception as e:
+                        logger.error(f"Failed to delete KB image from DB: {e}")
+            else:
+                updated_meta.append(entry)
+                
+        if found:
+            meta_path.write_text(json.dumps(updated_meta, indent=2), encoding="utf-8")
+        return found
+
+    def save_file_to_db(self, relative_path: str, data: bytes, content_type: str | None = None) -> None:
+        if not self._pool.enabled:
+            return
+        rel_path = Path(relative_path).as_posix()
+        from hashlib import md5
+        file_id = md5(rel_path.encode("utf-8")).hexdigest()
+        
+        with self._pool.connection() as conn:
+            if conn is None:
+                return
+            with conn.cursor() as cur:
+                try:
+                    import psycopg2
+                    cur.execute(
+                        """
+                        INSERT INTO stored_files (id, file_path, content_type, data)
+                        VALUES (%s, %s, %s, %s)
+                        ON CONFLICT (file_path) DO UPDATE 
+                        SET data = EXCLUDED.data, content_type = EXCLUDED.content_type;
+                        """,
+                        (file_id, rel_path, content_type, psycopg2.Binary(data))
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to save file {rel_path} to DB: {e}")
+
+    def delete_file_from_db(self, relative_path: str) -> None:
+        if not self._pool.enabled:
+            return
+        rel_path = Path(relative_path).as_posix()
+        with self._pool.connection() as conn:
+            if conn is None:
+                return
+            with conn.cursor() as cur:
+                try:
+                    cur.execute("DELETE FROM stored_files WHERE file_path = %s", (rel_path,))
+                except Exception as e:
+                    logger.error(f"Failed to delete file {rel_path} from DB: {e}")
+
+    def sync_campaign_dir_to_db(self, campaign_dir: Path) -> None:
+        if not self._pool.enabled:
+            return
+        import mimetypes
+        for p in campaign_dir.rglob("*"):
+            if p.is_file():
+                try:
+                    data = p.read_bytes()
+                    rel_path = p.relative_to(self._output_root).as_posix()
+                    mime, _ = mimetypes.guess_type(str(p))
+                    self.save_file_to_db(rel_path, data, mime)
+                except Exception as e:
+                    logger.error(f"Failed to sync file {p} to DB: {e}")

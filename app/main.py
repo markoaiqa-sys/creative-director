@@ -1,11 +1,12 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Response, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 import os
 import json
+import mimetypes
 
 from app.api.routes.creatives import router as creatives_router
 from app.api.routes.chat import router as chat_router
@@ -78,7 +79,57 @@ app.include_router(chat_router)
 app.include_router(suggestions_router)
 app.include_router(providers_router)
 app.mount("/frontend", StaticFiles(directory=str(FRONTEND_DIR)), name="frontend")
-app.mount("/output", StaticFiles(directory=str(settings.output_root)), name="output")
+
+@app.get("/output/{file_path:path}")
+async def serve_output_file(file_path: str):
+    settings = get_settings()
+    # Normalize path separator
+    safe_path = file_path.replace("\\", "/")
+    local_path = settings.output_root / safe_path
+    
+    if local_path.exists() and local_path.is_file():
+        mime, _ = mimetypes.guess_type(str(local_path))
+        return FileResponse(local_path, media_type=mime)
+        
+    # Fallback to Supabase Database
+    from app.core.supabase import DatabasePool
+    pool = DatabasePool(settings)
+    if pool.enabled:
+        with pool.connection() as conn:
+            if conn is not None:
+                with conn.cursor() as cur:
+                    try:
+                        cur.execute(
+                            """
+                            CREATE TABLE IF NOT EXISTS stored_files (
+                                id VARCHAR(255) PRIMARY KEY,
+                                file_path TEXT UNIQUE,
+                                content_type VARCHAR(100),
+                                data BYTEA,
+                                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                            );
+                            """
+                        )
+                        cur.execute(
+                            "SELECT data, content_type FROM stored_files WHERE file_path = %s",
+                            (safe_path,)
+                        )
+                        row = cur.fetchone()
+                        if row:
+                            data, content_type = row
+                            
+                            # Cache file locally so subsequent serves are fast
+                            try:
+                                local_path.parent.mkdir(parents=True, exist_ok=True)
+                                local_path.write_bytes(bytes(data))
+                            except Exception as e:
+                                print(f"[INFO] Failed to cache file locally: {e}")
+                                
+                            return Response(content=bytes(data), media_type=content_type or "application/octet-stream")
+                    except Exception as db_err:
+                        print(f"[INFO] Database file serve error: {db_err}")
+                        
+    raise HTTPException(status_code=404, detail="File not found")
 
 
 @app.get("/styles.css", include_in_schema=False)

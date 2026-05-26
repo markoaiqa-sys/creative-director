@@ -90,6 +90,21 @@ class CreativeDirectorEngine:
         )
 
     async def generate_single_image(self, payload: CreativeInput, concept: VisualConcept) -> GeneratedCreative:
+        print("\n" + "="*50)
+        print("[BACKEND] CREATIVE GENERATION IMAGE REFERENCES CHECK")
+        if payload.logo_image:
+            print(f"  - logo_image: PRESENT (len: {len(payload.logo_image)}) -> {payload.logo_image[:80]}...")
+        else:
+            print("  - logo_image: NOT PRESENT")
+        
+        if payload.sample_images:
+            print(f"  - sample_images count: {len(payload.sample_images)}")
+            for idx, img in enumerate(payload.sample_images):
+                print(f"    * Sample [{idx}]: len {len(img)} -> {img[:80]}...")
+        else:
+            print("  - sample_images: NOT PRESENT")
+        print("="*50 + "\n")
+
         has_reference_images = bool(payload.sample_images)
         generation_references = self._build_generation_references(payload)
         has_generation_references = bool(generation_references)
@@ -165,8 +180,11 @@ class CreativeDirectorEngine:
                 )
             )
             if results: generated_creative = results[0]
-
-        if not generated_creative and self._image_fallback_service and not has_reference_images:
+        if (
+            not has_reference_images
+            and (not generated_creative or generated_creative.status in (CreativeStatus.FAILED, CreativeStatus.SKIPPED))
+            and self._image_fallback_service
+        ):
             results = self._image_fallback_service.generate_batch(
                 payload=payload,
                 concepts=[concept],
@@ -181,6 +199,7 @@ class CreativeDirectorEngine:
                 status=CreativeStatus.FAILED,
                 prompt=concept.generation_prompt,
                 error="No provider available or generation timed out",
+                image_urls=[],
             )
             
         return generated_creative
@@ -193,6 +212,8 @@ class CreativeDirectorEngine:
         ad_copies: list[AdCopy],
         visual_concepts: list[VisualConcept],
         generated_creatives: list[GeneratedCreative],
+        client_email: str | None = None,
+        is_guest: bool = False,
     ) -> CampaignPackage:
         scored_creatives = await self._scoring_service.score(
             payload,
@@ -260,11 +281,11 @@ class CreativeDirectorEngine:
         package.output_directory = output_directory
 
         if self._database:
-            self._database.save_campaign(package)
+            self._database.save_campaign(package, client_email=client_email, is_guest=is_guest)
 
         return package
 
-    async def generate_campaign(self, payload: CreativeInput) -> CampaignPackage:
+    async def generate_campaign(self, payload: CreativeInput, client_email: str | None = None, is_guest: bool = False) -> CampaignPackage:
         concepts_resp = await self.generate_concepts(payload)
         
         # Sequentially generate images
@@ -280,6 +301,8 @@ class CreativeDirectorEngine:
             ad_copies=concepts_resp.ad_copies,
             visual_concepts=concepts_resp.visual_concepts,
             generated_creatives=generated_creatives,
+            client_email=client_email,
+            is_guest=is_guest,
         )
 
     @staticmethod

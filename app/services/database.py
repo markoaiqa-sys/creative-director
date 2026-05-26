@@ -112,6 +112,18 @@ class ChatDatabase(BaseDatabase):
                 )
             except Exception as e:
                 logger.warning(f"Failed to drop constraint (might not exist): {e}")
+
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS stored_files (
+                    id VARCHAR(255) PRIMARY KEY,
+                    file_path TEXT UNIQUE,
+                    content_type VARCHAR(100),
+                    data BYTEA,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                );
+                """
+            )
             
             cur.execute(
                 """
@@ -130,15 +142,32 @@ class ChatDatabase(BaseDatabase):
                 CREATE INDEX IF NOT EXISTS idx_execution_history_session_id ON execution_history(session_id);
                 """
             )
+            
+            # Add client_email for segregation
+            cur.execute(
+                """
+                ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS client_email VARCHAR(255);
+                """
+            )
+            cur.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_chat_sessions_client_email ON chat_sessions(client_email);
+                """
+            )
 
-    def save_message(self, session_id: str, role: str, content: str) -> None:
+    def save_message(self, session_id: str, role: str, content: str, client_email: str | None = None, is_guest: bool = False) -> None:
+        if is_guest:
+            return
         with self._cursor() as cur:
             if cur is None:
                 return
             cur.execute("SELECT id FROM chat_sessions WHERE id = %s", (session_id,))
             if not cur.fetchone():
                 title = content[:30] + ("..." if len(content) > 30 else "") if role == "user" else "Creative Assistant Chat"
-                cur.execute("INSERT INTO chat_sessions (id, title) VALUES (%s, %s);", (session_id, title))
+                if client_email:
+                    cur.execute("INSERT INTO chat_sessions (id, title, client_email) VALUES (%s, %s, %s);", (session_id, title, client_email))
+                else:
+                    cur.execute("INSERT INTO chat_sessions (id, title) VALUES (%s, %s);", (session_id, title))
             cur.execute(
                 """
                 INSERT INTO chat_messages (id, session_id, role, content)
@@ -147,10 +176,14 @@ class ChatDatabase(BaseDatabase):
                 (str(uuid.uuid4()), session_id, role, content),
             )
 
-    def get_history(self, session_id: str) -> list[dict]:
+    def get_history(self, session_id: str, client_email: str | None = None) -> list[dict]:
         with self._cursor() as cur:
             if cur is None:
                 return []
+            if client_email:
+                cur.execute("SELECT id FROM chat_sessions WHERE id = %s AND client_email = %s", (session_id, client_email))
+                if not cur.fetchone():
+                    return []
             cur.execute(
                 """
                 SELECT role, content FROM chat_messages
@@ -161,24 +194,40 @@ class ChatDatabase(BaseDatabase):
             )
             return [{"role": row[0], "content": row[1]} for row in cur.fetchall()]
 
-    def get_sessions(self) -> list[dict]:
+    def get_sessions(self, client_email: str | None = None) -> list[dict]:
         with self._cursor() as cur:
             if cur is None:
                 return []
-            cur.execute(
-                """
-                SELECT m.session_id, max(m.created_at) as last_activity, s.title
-                FROM chat_messages m
-                LEFT JOIN chat_sessions s ON m.session_id = s.id
-                GROUP BY m.session_id, s.title
-                ORDER BY last_activity DESC
-                LIMIT 20;
-                """
-            )
+            if client_email:
+                cur.execute(
+                    """
+                    SELECT m.session_id, max(m.created_at) as last_activity, s.title
+                    FROM chat_messages m
+                    LEFT JOIN chat_sessions s ON m.session_id = s.id
+                    WHERE s.client_email = %s
+                    GROUP BY m.session_id, s.title
+                    ORDER BY last_activity DESC
+                    LIMIT 20;
+                    """,
+                    (client_email,)
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT m.session_id, max(m.created_at) as last_activity, s.title
+                    FROM chat_messages m
+                    LEFT JOIN chat_sessions s ON m.session_id = s.id
+                    GROUP BY m.session_id, s.title
+                    ORDER BY last_activity DESC
+                    LIMIT 20;
+                    """
+                )
             return [{"session_id": row[0], "last_activity": row[1].isoformat(), "title": row[2]} for row in cur.fetchall()]
 
     def save_knowledge_base_item(self, session_id: str, file_name: str, file_type: str, file_path: str, 
-                                 file_content: str | None = None, metadata: dict | None = None) -> str | None:
+                                 file_content: str | None = None, metadata: dict | None = None, is_guest: bool = False) -> str | None:
+        if is_guest:
+            return None
         """Save a knowledge base item to Supabase."""
         with self._cursor() as cur:
             if cur is None:
@@ -230,7 +279,9 @@ class ChatDatabase(BaseDatabase):
 
     def save_execution_history(self, session_id: str, campaign_name: str, execution_type: str, 
                               input_data: dict, output_data: dict | None = None, status: str = "success",
-                              error_message: str | None = None, execution_time_ms: int = 0) -> str | None:
+                              error_message: str | None = None, execution_time_ms: int = 0, is_guest: bool = False) -> str | None:
+        if is_guest:
+            return None
         """Save execution/generation history to Supabase."""
         with self._cursor() as cur:
             if cur is None:
@@ -325,8 +376,21 @@ class CampaignDatabase(BaseDatabase):
                 CREATE INDEX IF NOT EXISTS idx_creative_campaigns_slug ON creative_campaigns(campaign_slug);
                 """
             )
+            # Add client_email for segregation
+            cur.execute(
+                """
+                ALTER TABLE creative_campaigns ADD COLUMN IF NOT EXISTS client_email VARCHAR(255);
+                """
+            )
+            cur.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_creative_campaigns_client_email ON creative_campaigns(client_email);
+                """
+            )
 
-    def save_campaign(self, package: CampaignPackage) -> str | None:
+    def save_campaign(self, package: CampaignPackage, client_email: str | None = None, is_guest: bool = False) -> str | None:
+        if is_guest:
+            return None
         with self._cursor() as cur:
             if cur is None:
                 return None
@@ -336,9 +400,9 @@ class CampaignDatabase(BaseDatabase):
                     INSERT INTO creative_campaigns (
                         campaign_name, campaign_slug, brand_name, platform, objective,
                         input_data, hooks, angles, ad_copies, visual_concepts,
-                        generated_creatives, scored_creatives, creative_assets
+                        generated_creatives, scored_creatives, creative_assets, client_email
                     ) VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                     ) RETURNING id;
                     """,
                     (
@@ -355,6 +419,7 @@ class CampaignDatabase(BaseDatabase):
                         json.dumps([g.model_dump(mode="json") for g in package.generated_creatives]),
                         json.dumps([s.model_dump(mode="json") for s in package.scored_creatives]),
                         json.dumps([a.model_dump(mode="json") for a in package.creative_assets]),
+                        client_email,
                     ),
                 )
                 result = cur.fetchone()
@@ -363,20 +428,32 @@ class CampaignDatabase(BaseDatabase):
                 logger.exception("Database save error: %s", exc)
                 return None
 
-    def get_campaigns(self, limit: int = 20) -> list[dict]:
+    def get_campaigns(self, limit: int = 20, client_email: str | None = None) -> list[dict]:
         with self._cursor() as cur:
             if cur is None:
                 return []
             try:
-                cur.execute(
-                    """
-                    SELECT id, campaign_name, campaign_slug, brand_name, platform, objective, created_at
-                    FROM creative_campaigns
-                    ORDER BY created_at DESC
-                    LIMIT %s;
-                    """,
-                    (limit,),
-                )
+                if client_email:
+                    cur.execute(
+                        """
+                        SELECT id, campaign_name, campaign_slug, brand_name, platform, objective, created_at
+                        FROM creative_campaigns
+                        WHERE client_email = %s
+                        ORDER BY created_at DESC
+                        LIMIT %s;
+                        """,
+                        (client_email, limit),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        SELECT id, campaign_name, campaign_slug, brand_name, platform, objective, created_at
+                        FROM creative_campaigns
+                        ORDER BY created_at DESC
+                        LIMIT %s;
+                        """,
+                        (limit,),
+                    )
                 columns = [desc[0] for desc in cur.description]
                 results = []
                 for row in cur.fetchall():
@@ -389,7 +466,7 @@ class CampaignDatabase(BaseDatabase):
                 logger.exception("Database fetch error: %s", exc)
                 return []
 
-    def get_campaign_history(self, limit: int | None = None, platform: Platform | None = None) -> CampaignHistoryResponse:
+    def get_campaign_history(self, limit: int | None = None, platform: Platform | None = None, client_email: str | None = None) -> CampaignHistoryResponse:
         with self._cursor() as cur:
             if cur is None:
                 return CampaignHistoryResponse(items=[])
@@ -399,11 +476,15 @@ class CampaignDatabase(BaseDatabase):
                     SELECT campaign_name, campaign_slug, platform, objective, created_at,
                            hooks, angles, visual_concepts, creative_assets
                     FROM creative_campaigns
+                    WHERE 1=1
                 """
                 params = []
                 if platform:
-                    query += " WHERE platform = %s "
+                    query += " AND platform = %s "
                     params.append(platform.value)
+                if client_email:
+                    query += " AND client_email = %s "
+                    params.append(client_email)
                 query += " ORDER BY created_at DESC "
                 
                 cur.execute(query, tuple(params))

@@ -6,6 +6,64 @@ let API_BASE_URL = (
   ? window.__APP_CONFIG__.BACKEND_URL.trim().replace(/\/+$/, "")
   : "";
 
+// --- Auth & DB Segregation Interceptor ---
+const originalFetch = window.fetch;
+window.fetch = async function () {
+  let [resource, config] = arguments;
+  if (!config) config = {};
+  if (!config.headers) config.headers = {};
+  
+  const authEmail = localStorage.getItem("auth_email");
+  const isGuest = localStorage.getItem("is_guest");
+  
+  if (config.headers instanceof Headers) {
+    if (authEmail) config.headers.append("X-Client-Email", authEmail);
+    if (isGuest) config.headers.append("X-Is-Guest", isGuest);
+  } else {
+    if (authEmail) config.headers["X-Client-Email"] = authEmail;
+    if (isGuest) config.headers["X-Is-Guest"] = isGuest;
+  }
+  
+  return originalFetch(resource, config);
+};
+
+// --- Auth Initialization ---
+document.addEventListener("DOMContentLoaded", () => {
+  const authEmail = localStorage.getItem("auth_email");
+  const isGuest = localStorage.getItem("is_guest");
+  const overlay = document.getElementById("login-overlay");
+  
+  if (!authEmail && isGuest !== "true") {
+    overlay.style.display = "flex";
+  } else {
+    overlay.style.display = "none";
+  }
+
+  const loginForm = document.getElementById("login-form");
+  if (loginForm) {
+    loginForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const email = document.getElementById("login-email").value;
+      if (email) {
+        localStorage.setItem("auth_email", email);
+        localStorage.setItem("is_guest", "false");
+        overlay.style.display = "none";
+        window.location.reload(); // Reload to fetch client-specific data
+      }
+    });
+  }
+
+  const guestBtn = document.getElementById("login-guest-btn");
+  if (guestBtn) {
+    guestBtn.addEventListener("click", () => {
+      localStorage.setItem("auth_email", "guest@marko.ai");
+      localStorage.setItem("is_guest", "true");
+      overlay.style.display = "none";
+      window.location.reload(); // Reload to clear previous state
+    });
+  }
+});
+
 const byId = (id) => document.getElementById(id);
 const chatBody = byId("chat-body");
 const chatInput = byId("chat-input");
@@ -49,6 +107,34 @@ const historyOutput = byId("history-output");
 const btnKnowledgeBase = byId("btn-knowledge-base");
 const requiredFieldIds = ["f-brand", "f-desc", "f-audience", "f-benefits"];
 
+// Redesigned Chat Composer elements
+const chatModeSelect = byId("chat-mode-select");
+const chatModelSelect = byId("chat-model-select");
+const chatAttachBtn = byId("chat-attach-btn");
+const chatAttachInput = byId("chat-attach-input");
+const chatAttachmentsPreview = byId("chat-attachments-preview");
+let chatAttachedFiles = [];
+let chatbotSessionAttachments = [];
+
+function updateChatAttachmentsPreview() {
+  if (!chatAttachmentsPreview) return;
+  chatAttachmentsPreview.innerHTML = "";
+  chatAttachedFiles.forEach((file, index) => {
+    const pill = document.createElement("div");
+    pill.className = "chat-attachment-pill";
+    pill.innerHTML = `
+      <span>📎 ${esc(file.name)}</span>
+      <button type="button" onclick="removeChatAttachment(${index})">✕</button>
+    `;
+    chatAttachmentsPreview.appendChild(pill);
+  });
+}
+window.removeChatAttachment = function(index) {
+  chatAttachedFiles.splice(index, 1);
+  updateChatAttachmentsPreview();
+};
+
+
 const MAX_SAMPLE_IMAGES = 3;
 const MAX_SAMPLE_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
 
@@ -63,9 +149,11 @@ const countTargets = {
 };
 
 let chatContext = {};
-let chatSessionId = localStorage.getItem("chat_session_id");
+let chatSessionId = null; // Default to new chat, history must be manually selected
 let selectedKnowledgeImages = [];
 let selectedSampleFiles = [];
+let currentSuggestions = [];
+let currentPayload = null;
 
 function defaultSampleHint() {
   return `Optional. Up to ${MAX_SAMPLE_IMAGES} images, max 5MB each, used as visual references for Vertex AI.`;
@@ -471,6 +559,19 @@ async function fetchKnowledgeBaseImages() {
   }
 }
 
+async function deleteKbImage(imageId) {
+  if (!confirm("Are you sure you want to remove this image from the Knowledge Base?")) return;
+  try {
+    const endpoint = (API_BASE_URL ? API_BASE_URL.replace(/\/+$/,'') : '') + `/knowledge-base/images/${encodeURIComponent(imageId)}`;
+    const res = await fetch(endpoint, { method: "DELETE" });
+    if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
+    fetchKnowledgeBaseImages(); // refresh
+  } catch (e) {
+    alert("Failed to delete image.");
+    console.error(e);
+  }
+}
+
 function renderKbGrid(items) {
   const grid = document.getElementById("kb-grid");
   if (!grid) return;
@@ -491,7 +592,8 @@ function renderKbGrid(items) {
         ? `<button class="link-btn" disabled style="opacity:0.5;cursor:not-allowed;">Limit reached</button>`
         : `<button class="link-btn" onclick="useKnowledgeImage('${escUrl}')">Use in generation</button>`;
     return `
-      <div class="card" style="text-align:center;padding:8px;">
+      <div class="card" style="text-align:center;padding:8px;position:relative;">
+        <button class="icon-btn" onclick="deleteKbImage('${esc(it.id)}')" style="position:absolute;top:4px;right:4px;width:24px;height:24px;line-height:24px;padding:0;background:rgba(0,0,0,0.5);color:white;border-radius:50%;font-size:12px;" aria-label="Delete Image">✕</button>
         <div style="height:120px;overflow:hidden;display:flex;align-items:center;justify-content:center;">
           <img src="${escUrl}" alt="${title}" style="max-width:100%;max-height:120px;object-fit:cover;border-radius:6px;" onclick="openImageModal('${escUrl}','${title}')" />
         </div>
@@ -805,16 +907,29 @@ function looksLikeCampaignRequest(message) {
 
 async function sendChatMessage() {
   const message = chatInput.value.trim();
-  if (!message) return;
-  appendChat("user", message);
+  
+  // Move current attachments to chatbotSessionAttachments so they aren't "left behind" in the input area
+  if (chatAttachedFiles.length > 0) {
+    console.log(`[CHATBOT] Saving ${chatAttachedFiles.length} attached image(s) to chatbotSessionAttachments.`);
+    chatbotSessionAttachments = chatbotSessionAttachments.concat(chatAttachedFiles);
+    chatAttachedFiles = [];
+    updateChatAttachmentsPreview();
+  }
+
+  if (!message && chatbotSessionAttachments.length === 0) return;
+  
+  if (message) {
+    appendChat("user", message);
+  } else {
+    appendChat("user", "[Sent attached image(s)]");
+  }
+
   chatInput.value = "";
   chatSend.disabled = true;
 
   try {
-    // Determine if this looks like a campaign generation request
-    const isCampaignRequest = looksLikeCampaignRequest(message) ||
-      (chatContext && chatContext.accumulated_params && Object.keys(chatContext.accumulated_params).length > 0);
-
+    const mode = chatModeSelect ? chatModeSelect.value : "ask";
+    const isCampaignRequest = (mode === "generate");
     const endpoint = isCampaignRequest ? "/chat-generate" : "/chat-assistant";
 
     const res = await fetch(`${API_BASE_URL}${endpoint}`, {
@@ -836,22 +951,92 @@ async function sendChatMessage() {
       // Step 1: Show the AI reply
       appendChat("ai", data.reply);
 
-      // Step 2: Fill in form fields visually
-      fillFormFromExtracted(data.extracted);
-      appendChat("ai", "✅ <strong>Form fields filled!</strong> Review the inputs on the left, then I'll start generating...", true);
+      // Step 2: Auto-trigger generation directly from prompt data
+      appendChat("ai", "⏳ <strong>Generating campaign directly...</strong> This may take 2-3 minutes.", true);
 
-      // Step 3: Scroll to the form briefly so user sees it filled
-      byId("f-brand")?.scrollIntoView({ behavior: "smooth", block: "center" });
-
-      // Step 4: Auto-trigger generation after a short delay
       setTimeout(async () => {
-        appendChat("ai", "⏳ <strong>Generating campaign...</strong> This may take 2-3 minutes.", true);
-
         try {
-          const payload = await buildPayload();
+          const ext = data.extracted;
+          
+          const hook_count = parseInt(byId("f-hooks")?.value || "5", 10);
+          const angle_count = parseInt(byId("f-angles")?.value || "3", 10);
+          const copy_count = parseInt(byId("f-copy")?.value || "5", 10);
+          const concept_count = Math.max(5, parseInt(byId("f-concepts")?.value || "5", 10));
+
+          const payload = {
+            brand_name: (ext.brand_name || "").trim(),
+            product_description: (ext.product_description || "").trim(),
+            target_audience: (ext.target_audience || "").trim(),
+            platform: ext.platform || "meta",
+            objective: ext.objective || "conversions",
+            tone: ext.tone || "premium",
+            key_benefits: Array.isArray(ext.key_benefits) ? ext.key_benefits : [],
+            competitors: Array.isArray(ext.competitors) ? ext.competitors : [],
+            visual_style: (ext.visual_style || "").trim(),
+            brand_colors: Array.isArray(ext.brand_colors) ? ext.brand_colors : [],
+            brand_fonts: Array.isArray(ext.brand_fonts) ? ext.brand_fonts : [],
+            reference_similarity: 0.5,
+            extra_details: (ext.extra_details || "").trim(),
+            hook_count,
+            angle_count,
+            copy_count,
+            concept_count,
+            sample_images: []
+          };
+
+          // Attachments logic for chatbot generation
+          if (chatbotSessionAttachments.length > 0) {
+            const selected = chatbotSessionAttachments.slice(0, MAX_SAMPLE_IMAGES);
+            for (const file of selected) {
+              try {
+                payload.sample_images.push(await getBase64(file));
+              } catch (e) {
+                console.error("Error reading attached file", e);
+              }
+            }
+          }
+
+          // Fetch the first Knowledge Base image as the Logo Icon (logo_image) for generation if available
+          try {
+            const kbEndpoint = (API_BASE_URL ? API_BASE_URL.replace(/\/+$/,'') : '') + '/knowledge-base/images';
+            const kbRes = await fetch(kbEndpoint);
+            if (kbRes.ok) {
+              const kbData = await kbRes.json();
+              const kbItems = kbData?.items || [];
+              if (kbItems.length > 0) {
+                const firstItem = kbItems[0];
+                const kbUrl = toPublicAssetUrl(firstItem.web_path || firstItem.webPath || firstItem.path || "");
+                if (kbUrl) {
+                  payload.logo_image = kbUrl;
+                }
+              }
+            }
+          } catch (kbErr) {
+            console.warn("Failed to retrieve Knowledge Base image for logo fallback:", kbErr);
+          }
+
+          // Console printing of image usage status
+          console.log("\n" + "=".repeat(40));
+          console.log("[FRONTEND] CREATIVE GENERATION IMAGE REFERENCES CHECK");
+          if (payload.logo_image) {
+            console.log("✅ Knowledge Base image WAS used as logo_image. URL:", payload.logo_image);
+          } else {
+            console.log("❌ No Knowledge Base image was found or used as logo_image.");
+          }
+
+          if (payload.sample_images && payload.sample_images.length > 0) {
+            console.log(`✅ ${payload.sample_images.length} attached image(s) WERE used as reference sample_images.`);
+            payload.sample_images.forEach((img, idx) => {
+              console.log(`   * Attachment [${idx}]: length ${img.length} -> ${img.substring(0, 80)}...`);
+            });
+          } else {
+            console.log("❌ No attached images were used as reference sample_images.");
+          }
+          console.log("=".repeat(40) + "\n");
+
           const validationErrors = validatePayload(payload);
           if (validationErrors.length) {
-            appendChat("ai", `❌ Missing required fields: ${validationErrors.join(", ")}. Please fill them in and try again.`);
+            appendChat("ai", `❌ Missing required fields: ${validationErrors.join(", ")}. Please supply them in your prompt and try again.`);
             return;
           }
 
@@ -867,10 +1052,13 @@ async function sendChatMessage() {
           const assetCount = campaignData.creative_assets?.length || 0;
           appendChat("ai", `🎉 <strong>Campaign generated!</strong> ${assetCount} creative${assetCount !== 1 ? 's' : ''} created. Check the <strong>Concepts</strong> tab to view them.`, true);
 
-          // Clear accumulated params for next conversation
+          // Clear accumulated params and chat attachments for next conversation
           if (chatContext) {
             chatContext.accumulated_params = {};
           }
+          chatAttachedFiles = [];
+          chatbotSessionAttachments = [];
+          updateChatAttachmentsPreview();
         } catch (genError) {
           setStatus(genError.message || "Generation failed.", true);
           showDashboard();
@@ -882,12 +1070,7 @@ async function sendChatMessage() {
       }, 2000);
 
     } else if (endpoint === "/chat-generate" && data.action === "ask_details") {
-      // Show the follow-up question and visually fill whatever was extracted so far
-      if (data.extracted) {
-        fillFormFromExtracted(data.extracted);
-      }
       appendChat("ai", data.reply);
-
     } else {
       // Normal chat response
       appendChat("ai", data.reply || "No response received.");
@@ -1062,10 +1245,10 @@ async function buildPayload() {
     return num;
   };
 
-  const hook_count = validateCount(byId("f-hooks").value, 1, 10, 3);
+  const hook_count = validateCount(byId("f-hooks").value, 1, 10, 5);
   const angle_count = validateCount(byId("f-angles").value, 1, 10, 3);
-  const copy_count = validateCount(byId("f-copy").value, 1, 10, 3);
-  const concept_count = validateCount(byId("f-concepts").value, 1, 10, 3);
+  const copy_count = validateCount(byId("f-copy").value, 1, 10, 5);
+  const concept_count = validateCount(byId("f-concepts").value, 1, 10, 5);
 
   const rawSimilarity = Number.parseFloat(referenceSimilarityInput?.value ?? "0.5");
   const safeSimilarity = Number.isFinite(rawSimilarity)
@@ -1085,6 +1268,7 @@ async function buildPayload() {
     brand_colors: byId("f-brand-colors").value.split(",").map((s) => s.trim()).filter(Boolean),
     brand_fonts: byId("f-brand-fonts").value.split(",").map((s) => s.trim()).filter(Boolean),
     reference_similarity: safeSimilarity,
+    extra_details: byId("f-extra") ? byId("f-extra").value.trim() : "",
     hook_count,
     angle_count,
     copy_count,
@@ -1167,6 +1351,17 @@ async function executeCampaignPipeline(payload) {
   if (!conceptsResponse.ok) throw new Error(conceptsData.detail || "Failed to generate concepts");
 
   const topConcepts = conceptsData.visual_concepts.slice(0, 3); // Hard limit to 3
+  currentSuggestions = conceptsData.visual_concepts.slice(3);
+  currentPayload = payload;
+  
+  if (currentSuggestions.length > 0) {
+    renderSuggestions();
+  } else {
+    document.getElementById("suggestions-list").innerHTML = `
+      <div class="card" style="border: 1px dashed #27272a !important; text-align: center; padding: 20px; background: #18181b !important;">
+        <p style="margin: 0; color: var(--muted);">No unused concepts available for suggestions.</p>
+      </div>`;
+  }
 
   showResults();
   activateTab("finals");
@@ -1295,6 +1490,21 @@ function wireEvents() {
     }
   });
 
+  if (chatAttachBtn && chatAttachInput) {
+    chatAttachBtn.addEventListener("click", () => chatAttachInput.click());
+    chatAttachInput.addEventListener("change", () => {
+      const files = Array.from(chatAttachInput.files || []);
+      for (const file of files) {
+        if (file.type.startsWith("image/")) {
+          chatAttachedFiles.push(file);
+        }
+      }
+      chatAttachInput.value = "";
+      updateChatAttachmentsPreview();
+    });
+  }
+
+
   if (supervisorNav) {
     supervisorNav.addEventListener("click", () => {
       showSupervisor();
@@ -1355,7 +1565,7 @@ function wireEvents() {
                     <span class="meta-pill">${esc(campaign.platform)}</span>
                   </div>
                 </div>
-                ${primaryImageUrl ? `<img src="${primaryImageUrl}" class="campaign-thumbnail" alt="Campaign preview">` : ""}
+                ${primaryImageUrl ? `<img src="${primaryImageUrl}" class="campaign-thumbnail" alt="Campaign preview" onerror="this.style.display='none'">` : ""}
                 <span class="toggle-icon">▼</span>
               </div>
               <div id="${expandId}" class="campaign-content">
@@ -1409,6 +1619,7 @@ function wireEvents() {
                           <p class="score">Score: ${esc(c.score)}</p>
                         </div>
                         <div class="creative-downloads">
+                            ${renderedUrl ? `<img src="${renderedUrl}" class="creative-thumb" alt="Preview" onerror="this.style.display='none'">` : ""}
                             ${renderedUrl ? `<button class="view-btn" onclick="openImageModal('${esc(renderedUrl)}', '${esc(c.headline || "Creative")}')">View</button>` : ''}
                             ${downloadButton(renderedUrl, `${c.concept_id}.png`, "Download PNG")}
                         </div>
@@ -1627,7 +1838,7 @@ function wireEvents() {
       tabChatbotBtn.classList.remove("active");
       suggestionsContentArea.classList.remove("hidden");
       chatbotContentArea.classList.add("hidden");
-      fetchAndRenderSuggestions();
+      renderSuggestions();
     });
   }
 
@@ -1638,96 +1849,131 @@ function wireEvents() {
   }
 }
 
-async function fetchAndRenderSuggestions() {
+function renderSuggestions() {
   const container = byId("suggestions-list");
   if (!container) return;
 
-  if (!chatContext || !chatContext.campaign) {
+  if (!currentSuggestions || currentSuggestions.length === 0) {
     container.innerHTML = `
       <div class="card" style="border: 1px dashed var(--line); text-align: center; padding: 20px; background: #18181b;">
-        <p style="margin: 0; color: var(--muted);">No campaign generated yet. Suggestions will appear here once you generate a campaign.</p>
+        <p style="margin: 0; color: var(--muted);">No more unused concepts available for suggestions.</p>
       </div>
     `;
     return;
   }
 
-  container.innerHTML = '<div style="padding: 10px; color: var(--muted); text-align: center;">Loading suggestions...</div>';
-
-  try {
-    const res = await fetch(`${API_BASE_URL}/suggestions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ campaign: chatContext.campaign })
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const suggestions = data.suggestions || [];
-    if (suggestions.length === 0) {
-      container.innerHTML = `
-        <div class="card" style="border: 1px dashed var(--line); text-align: center; padding: 20px; background: #18181b;">
-          <p style="margin: 0; color: var(--muted);">No suggestions available for the current campaign.</p>
+  container.innerHTML = currentSuggestions.map((concept, index) => {
+    // Generate a simple expected impact based on angle and mood
+    const expectedImpact = `By leveraging the "${concept.angle_name}" angle with a ${concept.mood} mood, this creative is designed to resonate strongly with the target audience and drive high engagement.`;
+    
+    return `
+      <div class="suggestion-card" id="sug-${index}">
+        <span class="suggestion-category category-visual_concept">Unused Concept</span>
+        <h4 class="suggestion-title-text">${esc(concept.hook_text)}</h4>
+        
+        <div class="suggestion-actions" style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; margin-bottom: 12px;">
+          <button class="suggestion-btn-outline" onclick="toggleSuggestionDetail('logic-${index}')" type="button">Detailed Logic</button>
+          <button class="suggestion-btn-outline" onclick="toggleSuggestionDetail('impact-${index}')" type="button">Expected Impact</button>
+          <div style="flex-grow: 1;"></div>
+          <button class="suggestion-btn-outline" onclick="ignoreSuggestion(${index})" type="button">Ignore</button>
+          <button class="suggestion-btn" onclick="executeSuggestion(${index})" type="button">Execute</button>
         </div>
-      `;
-      return;
-    }
 
-    container.innerHTML = suggestions.map((s) => {
-      const categoryLabel = String(s.category || "").replaceAll('_', ' ');
-      return `
-        <div class="suggestion-card" id="sug-${s.id}">
-          <span class="suggestion-category category-${s.category}">${esc(categoryLabel)}</span>
-          <h4 class="suggestion-title-text">${esc(s.title)}</h4>
-          <p class="suggestion-desc-text">${esc(s.description)}</p>
-          <button class="suggestion-btn" onclick="executeSuggestion('${esc(s.id)}')" type="button">Execute</button>
+        <div id="logic-${index}" class="suggestion-detail hidden" style="padding: 10px; background: rgba(0,0,0,0.2); border-radius: 4px; font-size: 0.85em; margin-bottom: 8px;">
+          <strong>Angle:</strong> ${esc(concept.angle_name)}<br>
+          <strong>Scene:</strong> ${esc(concept.scene_description)}<br>
+          <strong>Style:</strong> ${esc(concept.style_reference)}<br>
+          <strong>Colors:</strong> ${esc((concept.color_palette || []).join(", "))}
         </div>
-      `;
-    }).join("");
 
-    window.currentSuggestions = suggestions;
-  } catch (error) {
-    console.error("Suggestions fetch error:", error);
-    container.innerHTML = `
-      <div class="card" style="border: 1px dashed var(--line); text-align: center; padding: 20px; background: #18181b;">
-        <p style="margin: 0; color: #ff6b6b;">Error loading suggestions. Please ensure the API is running.</p>
+        <div id="impact-${index}" class="suggestion-detail hidden" style="padding: 10px; background: rgba(0,0,0,0.2); border-radius: 4px; font-size: 0.85em; margin-bottom: 8px;">
+          ${esc(expectedImpact)}
+        </div>
       </div>
     `;
-  }
+  }).join("");
 }
-window.fetchAndRenderSuggestions = fetchAndRenderSuggestions;
+window.renderSuggestions = renderSuggestions;
 
-async function executeSuggestion(id) {
-  const suggestion = window.currentSuggestions?.find(s => s.id === id);
-  if (!suggestion) return;
+function toggleSuggestionDetail(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.toggle("hidden");
+}
+window.toggleSuggestionDetail = toggleSuggestionDetail;
 
-  const btn = document.querySelector(`#sug-${id} .suggestion-btn`);
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = "Executing...";
-  }
+function ignoreSuggestion(index) {
+  if (!currentSuggestions || index >= currentSuggestions.length) return;
+  const item = currentSuggestions.splice(index, 1)[0];
+  currentSuggestions.push(item);
+  renderSuggestions();
+}
+window.ignoreSuggestion = ignoreSuggestion;
 
+async function executeSuggestion(index) {
+  if (!currentSuggestions || index >= currentSuggestions.length) return;
+  const concept = currentSuggestions[index];
+  
+  // Remove from suggestions and re-render
+  currentSuggestions.splice(index, 1);
+  renderSuggestions();
+
+  // Add chat message
+  appendChat("ai", `Executing suggested concept: <strong>${esc(concept.hook_text)}</strong>...`, true);
+  setStatus("Generating suggested image...");
+  
   try {
-    const res = await fetch(`${API_BASE_URL}/execute-suggestion`, {
+    const imageReq = {
+      payload: currentPayload,
+      concept: concept
+    };
+
+    const imageResponse = await fetch(`${API_BASE_URL}/generate-image`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ suggestion, campaign: chatContext.campaign })
+      body: JSON.stringify(imageReq)
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
     
-    setStatus(data.message || "Suggestion executed successfully!", false);
-    await fetchAndRenderSuggestions();
+    const imageData = await imageResponse.json();
+    if (!imageResponse.ok) throw new Error("Failed to generate image");
+
+    // Add directly to the output without scoring for simplicity, or we could run scoring if needed.
+    // For this implementation, we will append it as a rendered ad.
+    if (imageData.image_urls && imageData.image_urls.length > 0) {
+      const tempCard = document.createElement("div");
+      tempCard.className = "card card-creative";
+      tempCard.innerHTML = `
+         <div class="card-status-bar" style="background-color: #27ae60; color: white;">Suggested Creative</div>
+         <div class="creative-image-container">
+             <img src="${toPublicAssetUrl(imageData.image_urls[0])}" class="creative-image" alt="Generated">
+         </div>
+         <div class="creative-content">
+             <h3 class="creative-headline" style="color: #fff;">${esc(concept.angle_name)}</h3>
+             <p class="creative-text">${esc(concept.hook_text)}</p>
+         </div>
+      `;
+      finalsOutput.appendChild(tempCard);
+      
+      const currentCount = parseInt(byId("finals-count").textContent || "0");
+      setCount("finals", currentCount + 1);
+      
+      appendChat("ai", "Suggested image generation complete! Check the <strong>Final Ads</strong> tab.", true);
+      setStatus("Ready.");
+    }
   } catch (error) {
     console.error("Execute suggestion error:", error);
     setStatus("Failed to execute suggestion.", true);
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = "Execute";
-    }
+    appendChat("ai", "Sorry, an error occurred while generating the suggested image.");
   }
 }
 window.executeSuggestion = executeSuggestion;
 
 resetOutputs();
+
+// Force counts to 5 on load to override any browser caching/autofill
+if (byId("f-concepts")) byId("f-concepts").value = "5";
+if (byId("f-hooks")) byId("f-hooks").value = "5";
+if (byId("f-copy")) byId("f-copy").value = "5";
+
 wireEvents();
 loadUiConfig();
 loadChatHistory();
@@ -1746,6 +1992,34 @@ if (btnChatClose && btnChatOpen && appShell) {
   btnChatOpen.addEventListener("click", () => {
     appShell.classList.remove("assistant-closed");
     btnChatOpen.classList.add("hidden");
+  });
+}
+
+// Knowledge Base upload handler
+const kbUploadInput = document.getElementById("kb-upload-input");
+if (kbUploadInput) {
+  kbUploadInput.addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("title", file.name);
+    
+    try {
+      const endpoint = (API_BASE_URL ? API_BASE_URL.replace(/\/+$/,'') : '') + '/knowledge-base/images';
+      const res = await fetch(endpoint, {
+        method: "POST",
+        body: formData
+      });
+      if (!res.ok) throw new Error("Upload failed");
+      // Clear input and refresh grid
+      kbUploadInput.value = "";
+      fetchKnowledgeBaseImages();
+    } catch (err) {
+      console.error("Upload error", err);
+      alert("Failed to upload image.");
+    }
   });
 }
 

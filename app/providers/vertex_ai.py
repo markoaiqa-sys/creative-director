@@ -52,6 +52,7 @@ class VertexAIClient:
     }
 
     def __init__(self, settings: Settings) -> None:
+        self._settings = settings
         self._project_id = settings.vertex_ai_project_id
         self._location = settings.vertex_ai_location
         self._provider = (settings.vertex_ai_provider or "imagen").strip().lower()
@@ -163,14 +164,28 @@ class VertexAIClient:
                 ),
             )
 
-        max_attempts = 2
+        max_attempts = 3
         last_error = ""
         for attempt in range(max_attempts):
             try:
+                # On retry after empty bytes, use a simplified version of the concept
+                retry_concept = concept
+                if attempt > 0 and last_error == "No usable image bytes in response":
+                    from copy import deepcopy
+                    retry_concept = deepcopy(concept)
+                    # Simplify prompt to reduce chance of output safety filter
+                    scene = concept.scene_description or "professional product advertisement"
+                    retry_concept.generation_prompt = (
+                        f"Create a clean, professional commercial advertisement image. "
+                        f"Scene: {scene}. "
+                        f"Style: modern, premium, minimalist. High resolution product photography."
+                    )
+                    print(f"[VERTEX_AI] {concept.concept_id} attempt {attempt+1}: using SIMPLIFIED prompt to bypass output filter")
+
                 if self._provider == "gemini_image":
-                    image_urls = await self._call_gemini_image_api(concept, sample_images=sample_images)
+                    image_urls = await self._call_gemini_image_api(retry_concept, sample_images=sample_images)
                 else:
-                    image_urls = await self._call_imagen_api(concept, sample_images=sample_images)
+                    image_urls = await self._call_imagen_api(retry_concept, sample_images=sample_images)
                 if image_urls:
                     return GeneratedCreative(
                         concept_id=concept.concept_id,
@@ -266,8 +281,31 @@ class VertexAIClient:
                 print("[VERTEX_AI] Edit model unavailable; using text-only generation fallback")
         return self._client.generate_images(**kwargs)
 
-    def _generate_gemini_image_sync(self, concept: VisualConcept, sample_images: list[str] | None = None):
-        contents: list = [concept.generation_prompt]
+    @staticmethod
+    def _sanitize_prompt(prompt: str) -> str:
+        """Strip words that commonly trigger Vertex AI INVALID_ARGUMENT rejections."""
+        import re
+        # Remove words that Vertex safety filters tend to flag
+        blocked_patterns = [
+            r'\b(blood|gore|violent|violence|kill|death|dead|weapon|gun|knife|nude|naked|sexy|erotic)\b',
+            r'\b(drug|drugs|cocaine|heroin|marijuana|alcohol|cigarette|smoking)\b',
+            r'\b(attack|destroy|destruction|explode|explosion|bomb|terror)\b',
+        ]
+        sanitized = prompt
+        for pattern in blocked_patterns:
+            sanitized = re.sub(pattern, '', sanitized, flags=re.IGNORECASE)
+        # Collapse extra whitespace
+        sanitized = re.sub(r'\s+', ' ', sanitized).strip()
+        return sanitized
+
+    def _generate_gemini_image_sync(self, concept: VisualConcept, sample_images: list[str] | None = None, *, sanitize: bool = False):
+        prompt = concept.generation_prompt
+        if sanitize:
+            prompt = self._sanitize_prompt(prompt)
+            print(f"[VERTEX_AI] Using SANITIZED prompt for retry: {prompt[:120]}...")
+        else:
+            print(f"[VERTEX_AI] Prompt for {concept.concept_id}: {prompt[:200]}...")
+        contents: list = [prompt]
         attached_count = 0
         for source in sample_images or []:
             try:
@@ -305,12 +343,23 @@ class VertexAIClient:
             except Exception as exc:
                 error_str = str(exc)
                 is_rate_limit = "429" in error_str or "RESOURCE_EXHAUSTED" in error_str
+                is_invalid_arg = "INVALID_ARGUMENT" in error_str or "400" in error_str
 
                 if is_rate_limit and attempt < max_retries:
                     wait_time = 15 * (2 ** attempt)  # 15s, 30s, 60s
                     print(f"[VERTEX_AI] 429 rate limit on attempt {attempt+1}/{max_retries+1}, waiting {wait_time}s before retry...")
                     import time
                     time.sleep(wait_time)
+                    continue
+
+                # On INVALID_ARGUMENT, try sanitizing the prompt text
+                if is_invalid_arg and attempt < max_retries and not sanitize:
+                    print(f"[VERTEX_AI] INVALID_ARGUMENT on attempt {attempt+1}, retrying with sanitized prompt...")
+                    sanitized_prompt = self._sanitize_prompt(contents[0] if isinstance(contents[0], str) else concept.generation_prompt)
+                    contents[0] = sanitized_prompt
+                    sanitize = True  # mark so we don't re-sanitize
+                    import time
+                    time.sleep(2)
                     continue
 
                 if attempt == max_retries:
@@ -436,6 +485,31 @@ class VertexAIClient:
             filename = f"{provider_prefix}_{timestamp}_{content_hash}.png"
             filepath = output_dir / filename
             filepath.write_bytes(normalized_bytes)
+            
+            # Sync to database
+            try:
+                from app.core.supabase import DatabasePool
+                pool = DatabasePool(self._settings)
+                if pool.enabled:
+                    rel_path = f"vertex_ai_images/{filename}"
+                    from hashlib import md5
+                    file_id = md5(rel_path.encode("utf-8")).hexdigest()
+                    with pool.connection() as conn:
+                        if conn is not None:
+                            with conn.cursor() as cur:
+                                import psycopg2
+                                cur.execute(
+                                    """
+                                    INSERT INTO stored_files (id, file_path, content_type, data)
+                                    VALUES (%s, %s, %s, %s)
+                                    ON CONFLICT (file_path) DO UPDATE 
+                                    SET data = EXCLUDED.data, content_type = EXCLUDED.content_type;
+                                    """,
+                                    (file_id, rel_path, "image/png", psycopg2.Binary(normalized_bytes))
+                                )
+            except Exception as db_err:
+                print(f"[VERTEX_AI] Failed to save image to DB: {db_err}")
+
             return f"vertex_ai_images/{filename}"
         except Exception as e:
             print(f"[VERTEX_AI] Failed to save image locally: {e}")

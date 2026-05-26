@@ -52,12 +52,13 @@ class CreativeInput(BaseModel):
     brand_colors: list[str] = Field(default_factory=list)
     brand_fonts: list[str] = Field(default_factory=list)
     logo_image: str | None = None
+    extra_details: str | None = None
 
     campaign_name: str | None = None
-    hook_count: int = Field(default=3, ge=1, le=10)
+    hook_count: int = Field(default=5, ge=1, le=10)
     angle_count: int = Field(default=3, ge=1, le=10)
-    copy_count: int = Field(default=3, ge=1, le=10)
-    concept_count: int = Field(default=3, ge=1, le=10)
+    copy_count: int = Field(default=5, ge=1, le=10)
+    concept_count: int = Field(default=5, ge=1, le=10)
 
     @field_validator("brand_name", "product_description", "target_audience", "tone", "visual_style")
     @classmethod
@@ -164,6 +165,7 @@ class RenderedAd(BaseModel):
     supporting_text: str | None = None
     cta_text: str
     brand_name: str
+    image_base64: str | None = None
 
 
 class AdPreview(BaseModel):
@@ -172,6 +174,7 @@ class AdPreview(BaseModel):
     image_path: str
     width: int
     height: int
+    image_base64: str | None = None
 
 
 class ExportRow(BaseModel):

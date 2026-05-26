@@ -5,23 +5,81 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="backend-url" content="">
   <title>Creative Director Engine</title>
-  <link rel="stylesheet" href="/styles.css?v=20260522_4">
+  <link rel="stylesheet" href="/styles.css?v=20260526_1">
   <script src="/env-config.js?v=20260522_4"></script>
 </head>
 <body>
+  <!-- Login Overlay -->
+  <section id="login-overlay" class="login-overlay">
+    <div class="login-card">
+      <div class="login-header">
+        <div class="login-title-group">
+          <p class="login-subtitle">WELCOME BACK</p>
+          <h1 class="login-title">Continue with email.</h1>
+        </div>
+        <div class="login-logo">M</div>
+      </div>
+      
+      <form id="login-form">
+        <div class="input-group">
+          <label for="login-email">Work email</label>
+          <input type="email" id="login-email" placeholder="you@company.com" required>
+        </div>
+        <div class="input-group">
+          <label for="login-password">Password</label>
+          <input type="password" id="login-password" placeholder="Enter your password" required>
+        </div>
+        
+        <div class="login-info-box">
+          Your workspace, Meta connection state, and assistant settings resolve automatically after email login.
+        </div>
+        
+        <button type="submit" class="login-submit-btn">Log in</button>
+      </form>
+      
+      <div class="login-divider">
+        <span>OR</span>
+      </div>
+      
+      <button type="button" id="login-guest-btn" class="login-guest-btn">Continue as guest <span>(mock workspace)</span></button>
+    </div>
+  </section>
   <main class="app-shell">
     <aside class="sidebar">
       <div class="brand"><div class="brand-mark" style="background: transparent;"><img src="/IMG_20260420_033023.png" alt="M" style="width: 100%; height: 100%; object-fit: contain;"></div><div class="brand-name">Marko AI</div></div>
-      <p class="nav-label">Orchestrator</p>
-      <button class="nav-item active" id="supervisor-nav" type="button"><span class="nav-icon">SV</span><span>Supervisor</span></button>
-      <p class="nav-label">Specialist Agents</p>
-      <button class="nav-item" id="dashboard-nav" type="button"><span class="nav-icon">CD</span><span>Creative Director</span></button>
-      <button class="nav-item specialist" data-agent-tab="hooks" type="button"><span class="nav-icon">HG</span><span>Hook Generator</span></button>
-      <button class="nav-item specialist" data-agent-tab="angles" type="button"><span class="nav-icon">AS</span><span>Angle Strategist</span></button>
-      <button class="nav-item specialist" data-agent-tab="copy" type="button"><span class="nav-icon">CA</span><span>Copy Architect</span></button>
-      <button class="nav-item specialist" data-agent-tab="concepts" type="button"><span class="nav-icon">VP</span><span>Visual Planner</span></button>
-      <p class="nav-label">Analysis</p>
-      <button class="nav-item" id="nav-execution-history" type="button"><span class="nav-icon">CH</span><span>Creative History</span></button>
+      <p class="nav-label">ORCHESTRATOR</p>
+      <button class="nav-item active" id="supervisor-nav" type="button">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="nav-icon-svg"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+        <span>Supervisor</span>
+      </button>
+      
+      <p class="nav-label">SPECIALIST AGENTS</p>
+      <button class="nav-item" id="dashboard-nav" type="button">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="nav-icon-svg"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+        <span>Creative Director</span>
+      </button>
+      <button class="nav-item specialist" data-agent-tab="hooks" type="button">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="nav-icon-svg"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+        <span>Hook Generator</span>
+      </button>
+      <button class="nav-item specialist" data-agent-tab="angles" type="button">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="nav-icon-svg"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+        <span>Angle Strategist</span>
+      </button>
+      <button class="nav-item specialist" data-agent-tab="copy" type="button">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="nav-icon-svg"><polyline points="4 7 4 4 20 4 20 7"></polyline><line x1="9" y1="20" x2="15" y2="20"></line><line x1="12" y1="4" x2="12" y2="20"></line></svg>
+        <span>Copy Architect</span>
+      </button>
+      <button class="nav-item specialist" data-agent-tab="concepts" type="button">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="nav-icon-svg"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+        <span>Visual Planner</span>
+      </button>
+      
+      <p class="nav-label">ANALYSIS</p>
+      <button class="nav-item" id="nav-execution-history" type="button">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="nav-icon-svg"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+        <span>Creative History</span>
+      </button>
       <div class="user-row"><div class="user-avatar" style="background: #ffffff; color: #000000;">D</div><div><div class="user-name">Demo Client</div><div class="user-role">Pro Plan</div></div></div>
     </aside>
     <section class="main-panel">
@@ -48,7 +106,7 @@
               <button class="top-pill" type="button">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>Train Model
               </button>
-              <button class="top-pill" type="button">
+              <button class="top-pill" type="button" onclick="showDashboard()">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>Run Analysis
               </button>
             </div>
@@ -85,6 +143,7 @@
               <label class="field span-2"><span>Product Description</span><textarea id="f-desc"></textarea></label>
               <label class="field span-2"><span>Target Audience</span><input id="f-audience" type="text" value=""></label>
               <label class="field span-2"><span>Key Benefits (comma separated)</span><input id="f-benefits" type="text" value=""></label>
+              <label class="field span-2"><span>Extra Instructions / Details</span><textarea id="f-extra" placeholder="e.g., Must include a call to action for Friday, Use 20% off discount"></textarea></label>
               <label class="field"><span>Competitors (comma separated)</span><input id="f-competitors" type="text" value=""></label>
               <label class="field"><span>Visual Style</span><input id="f-visual" type="text" value=""></label>
               <label class="field"><span>Brand Colors (Optional, e.g., blackwhite, bluegreen)</span><input id="f-brand-colors" type="text" placeholder="blackwhite, bluegreen"></label>
@@ -185,9 +244,28 @@
           </div>
         </div>
 
-        <footer class="chat-composer">
-          <textarea id="chat-input" rows="1" placeholder="Type a message..."></textarea>
-          <button id="chat-send" type="button" aria-label="Send">Send</button>
+        <footer class="chat-composer-redesign">
+          <div class="chat-composer-top">
+            <button id="chat-attach-btn" class="chat-attach-btn" type="button" aria-label="Attach reference image">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+            </button>
+            <span class="chat-composer-hint">Add context (#), extensions (@), commands (/)</span>
+          </div>
+          <textarea id="chat-input" rows="1" placeholder="Ask or instruct the assistant..."></textarea>
+          <div class="chat-composer-bottom">
+            <div class="chat-composer-selectors">
+              <select id="chat-mode-select" class="chat-select">
+                <option value="ask">Ask</option>
+                <option value="generate">Generate</option>
+              </select>
+              <select id="chat-model-select" class="chat-select">
+                <option value="marko-2.0-mini">marko-2.0-mini</option>
+              </select>
+            </div>
+            <button id="chat-send" class="chat-send-btn" type="button" aria-label="Send">→</button>
+          </div>
+          <input type="file" id="chat-attach-input" accept="image/*" multiple style="display: none;">
+          <div id="chat-attachments-preview" class="chat-attachments-preview"></div>
         </footer>
       </div>
 
@@ -215,11 +293,18 @@
   <div id="kbModal" class="image-modal hidden" onclick="if(event.target === this) closeKbModal()">
     <div class="image-modal-content" style="max-width:900px;">
       <button class="modal-close" onclick="closeKbModal()">✕</button>
-      <h2>Knowledge Base</h2>
-      <p style="color:var(--muted,#666);margin-top:6px;margin-bottom:12px;">Select one or more images to use as sample context for generation.</p>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+        <h2 style="margin: 0;">Knowledge Base</h2>
+        <div style="margin-right: 32px;">
+          <input type="file" id="kb-upload-input" accept="image/*" style="display: none;">
+          <button class="top-pill" onclick="document.getElementById('kb-upload-input').click()">Upload Image</button>
+        </div>
+      </div>
+      <p style="color:var(--muted,#666);margin-bottom:12px;margin-top:0;">Select one or more images to use as sample context for generation.</p>
       <div id="kb-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;max-height:60vh;overflow:auto;padding:6px;"></div>
     </div>
   </div>
-  <script defer src="/app.js?v=20260525_5"></script>
+
+  <script defer src="/app.js?v=20260526_9"></script>
 </body>
 </html>

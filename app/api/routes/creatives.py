@@ -25,14 +25,21 @@ def get_engine(container: ServiceContainer = Depends(get_container)) -> Creative
     return container.engine
 
 
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, UploadFile, File, Form
+
+# ... (omitted but Header is imported)
+
 @router.post("/generate-creatives", response_model=CampaignPackage)
 async def generate_creatives(
     payload: CreativeInput,
     _actor: str = Depends(require_api_auth),
     engine: CreativeDirectorEngine = Depends(get_engine),
+    x_client_email: str | None = Header(None),
+    x_is_guest: str | None = Header(None),
 ) -> CampaignPackage:
     try:
-        return await engine.generate_campaign(payload)
+        is_guest_bool = x_is_guest == "true"
+        return await engine.generate_campaign(payload, client_email=x_client_email, is_guest=is_guest_bool)
     except ValueError as exc:
         print(f"[ERROR] ValueError: {exc}")  # Add
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -81,8 +88,11 @@ async def api_score_and_package(
     req: ScoringRequest,
     _actor: str = Depends(require_api_auth),
     engine: CreativeDirectorEngine = Depends(get_engine),
+    x_client_email: str | None = Header(None),
+    x_is_guest: str | None = Header(None),
 ) -> CampaignPackage:
     try:
+        is_guest_bool = x_is_guest == "true"
         return await engine.score_and_package(
             payload=req.payload,
             hooks=req.hooks,
@@ -90,6 +100,8 @@ async def api_score_and_package(
             ad_copies=req.ad_copies,
             visual_concepts=req.visual_concepts,
             generated_creatives=req.generated_creatives,
+            client_email=x_client_email,
+            is_guest=is_guest_bool,
         )
     except Exception as exc:
         print(f"[ERROR] score_and_package failed: {exc}")
@@ -140,3 +152,14 @@ async def list_kb_images(
     engine: CreativeDirectorEngine = Depends(get_engine),
 ):
     return {"items": engine._storage.list_kb_images()}
+
+@router.delete("/knowledge-base/images/{image_id}")
+async def delete_kb_image(
+    image_id: str,
+    _actor: str = Depends(require_api_auth),
+    engine: CreativeDirectorEngine = Depends(get_engine),
+):
+    success = engine._storage.delete_kb_image(image_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Image not found")
+    return {"success": True}

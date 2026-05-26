@@ -21,8 +21,14 @@ class ChatResponse(BaseModel):
     session_id: str | None = None
 
 
+from fastapi import APIRouter, Header, Request, Depends
+
 @router.post("/chat-assistant", response_model=ChatResponse)
-async def chat_assistant(request: ChatRequest):
+async def chat_assistant(
+    request: ChatRequest,
+    x_client_email: str | None = Header(None),
+    x_is_guest: str | None = Header(None)
+):
     settings = get_settings()
     from app.services.database import ChatDatabase
     import uuid
@@ -167,8 +173,9 @@ Rules:
 
     # --- Return reply or friendly error ---
     if reply:
-        chat_db.save_message(session_id, "user", request.message)
-        chat_db.save_message(session_id, "assistant", reply)
+        is_guest_bool = x_is_guest == "true"
+        chat_db.save_message(session_id, "user", request.message, client_email=x_client_email, is_guest=is_guest_bool)
+        chat_db.save_message(session_id, "assistant", reply, client_email=x_client_email, is_guest=is_guest_bool)
         new_history = history + [
             {"role": "user", "content": request.message},
             {"role": "assistant", "content": reply},
@@ -187,29 +194,37 @@ Rules:
         return ChatResponse(reply=friendly, context=request.context, session_id=session_id)
 
 @router.get("/chat-history/{session_id}")
-async def get_chat_history(session_id: str):
+async def get_chat_history(
+    session_id: str,
+    x_client_email: str | None = Header(None)
+):
     settings = get_settings()
     from app.services.database import ChatDatabase
     chat_db = ChatDatabase(settings)
-    history = chat_db.get_history(session_id)
+    history = chat_db.get_history(session_id, client_email=x_client_email)
     return {"session_id": session_id, "history": history}
 
 @router.get("/chat-sessions")
-async def get_chat_sessions():
+async def get_chat_sessions(
+    x_client_email: str | None = Header(None)
+):
     settings = get_settings()
     from app.services.database import ChatDatabase
     chat_db = ChatDatabase(settings)
-    sessions = chat_db.get_sessions()
+    sessions = chat_db.get_sessions(client_email=x_client_email)
     return {"sessions": sessions}
 
 @router.get("/session-data/{session_id}")
-async def get_session_data(session_id: str):
+async def get_session_data(
+    session_id: str,
+    x_client_email: str | None = Header(None)
+):
     """Get all session data: chat history, knowledge base, and execution history."""
     settings = get_settings()
     from app.services.database import ChatDatabase
     chat_db = ChatDatabase(settings)
     
-    chat_history = chat_db.get_history(session_id)
+    chat_history = chat_db.get_history(session_id, client_email=x_client_email)
     knowledge_base = chat_db.get_knowledge_base(session_id)
     execution_history = chat_db.get_execution_history(session_id)
     
@@ -221,12 +236,17 @@ async def get_session_data(session_id: str):
     }
 
 @router.post("/knowledge-base/{session_id}")
-async def save_knowledge_base(session_id: str, kb_item: dict):
+async def save_knowledge_base(
+    session_id: str,
+    kb_item: dict,
+    x_is_guest: str | None = Header(None)
+):
     """Save a knowledge base item to the session."""
     settings = get_settings()
     from app.services.database import ChatDatabase
     chat_db = ChatDatabase(settings)
     
+    is_guest_bool = x_is_guest == "true"
     kb_id = chat_db.save_knowledge_base_item(
         session_id=session_id,
         file_name=kb_item.get("file_name", "unknown"),
@@ -234,6 +254,7 @@ async def save_knowledge_base(session_id: str, kb_item: dict):
         file_path=kb_item.get("file_path", ""),
         file_content=kb_item.get("file_content"),
         metadata=kb_item.get("metadata", {}),
+        is_guest=is_guest_bool
     )
     
     return {"success": kb_id is not None, "kb_id": kb_id, "session_id": session_id}
@@ -249,7 +270,11 @@ async def get_knowledge_base(session_id: str):
     return {"session_id": session_id, "knowledge_base": knowledge_base}
 
 @router.post("/execution-history/{session_id}")
-async def save_execution_history(session_id: str, execution: dict):
+async def save_execution_history(
+    session_id: str,
+    execution: dict,
+    x_is_guest: str | None = Header(None)
+):
     """Save execution/generation history."""
     settings = get_settings()
     from app.services.database import ChatDatabase
@@ -258,6 +283,7 @@ async def save_execution_history(session_id: str, execution: dict):
     chat_db = ChatDatabase(settings)
     start_time = time.time()
     
+    is_guest_bool = x_is_guest == "true"
     execution_id = chat_db.save_execution_history(
         session_id=session_id,
         campaign_name=execution.get("campaign_name", "unknown"),
@@ -267,6 +293,7 @@ async def save_execution_history(session_id: str, execution: dict):
         status=execution.get("status", "success"),
         error_message=execution.get("error_message"),
         execution_time_ms=int((time.time() - start_time) * 1000),
+        is_guest=is_guest_bool
     )
     
     return {"success": execution_id is not None, "execution_id": execution_id, "session_id": session_id}
@@ -303,6 +330,7 @@ OPTIONAL FIELDS:
 - brand_colors: List of hex colors
 - brand_fonts: List of font names
 - campaign_name: Custom campaign name
+- extra_details: Any other important instructions, constraints, or offers mentioned by the user (e.g., "Use 20% off discount", "Must include a call to action for Friday")
 
 INSTRUCTIONS:
 1. Analyze the ENTIRE conversation history to extract as many fields as possible.
@@ -327,7 +355,8 @@ RESPOND WITH ONLY A JSON OBJECT in this exact format:
     "visual_style": "",
     "brand_colors": [],
     "brand_fonts": [],
-    "campaign_name": ""
+    "campaign_name": "",
+    "extra_details": ""
   },
   "missing_fields": ["field1", "field2"]
 }
@@ -353,7 +382,11 @@ class ChatGenerateResponse(BaseModel):
 
 
 @router.post("/chat-generate", response_model=ChatGenerateResponse)
-async def chat_generate(request: ChatGenerateRequest):
+async def chat_generate(
+    request: ChatGenerateRequest,
+    x_client_email: str | None = Header(None),
+    x_is_guest: str | None = Header(None)
+):
     """Chatbot endpoint that extracts campaign parameters and triggers generation."""
     settings = get_settings()
     from app.services.database import ChatDatabase
@@ -466,13 +499,82 @@ async def chat_generate(request: ChatGenerateRequest):
                     pass
 
     if not parsed:
-        # LLM failed — return a friendly fallback
+        # LLM failed — attempt regex-based extraction as a last resort
+        import re
+        log.warning("[CHAT-GEN] LLM extraction failed, attempting regex fallback")
+        msg = request.message
+
+        brand_match = re.search(r'(?:for|brand[:\s]*)\s+([A-Z][a-zA-Z0-9 ]+?)(?:\.|,|\s+It)', msg)
+        brand_name = brand_match.group(1).strip() if brand_match else ""
+
+        # Product description: "It's a ..." until the next sentence boundary with "targeting"
+        desc_match = re.search(r"[Ii]t'?s\s+(?:a|an)\s+(.+?)(?:\s+targeting|\.\s)", msg, re.DOTALL)
+        product_desc = desc_match.group(1).strip() if desc_match else ""
+
+        audience_match = re.search(r'targeting\s+(.+?)(?:\.|,\s*Use|\s+Use)', msg, re.IGNORECASE)
+        target_audience = audience_match.group(1).strip() if audience_match else ""
+
+        tone_match = re.search(r'(?:Use\s+(?:a\s+)?)([\w,\s]+?)\s+tone', msg, re.IGNORECASE)
+        tone = tone_match.group(1).strip().split(",")[0].strip().lower() if tone_match else "premium"
+        valid_tones = {"premium", "casual", "bold", "friendly", "urgent"}
+        if tone not in valid_tones:
+            tone = "premium"
+
+        platform_match = re.search(r'for\s+(Meta|Google|TikTok)\s', msg, re.IGNORECASE)
+        platform = platform_match.group(1).strip().lower() if platform_match else "meta"
+
+        objective_match = re.search(r'(?:Meta|Google|TikTok)\s+(conversions|traffic|awareness)', msg, re.IGNORECASE)
+        objective = objective_match.group(1).strip().lower() if objective_match else "conversions"
+
+        benefits_match = re.search(r'[Kk]ey benefits?[:\s]+(.+?)(?:\.\s*[A-Z]|\.\s*$|$)', msg, re.DOTALL)
+        benefits = []
+        if benefits_match:
+            raw_benefits = benefits_match.group(1).strip().rstrip(".")
+            benefits = [b.strip() for b in raw_benefits.split(",") if b.strip()]
+
+        competitors_match = re.search(r'[Cc]ompetitors?[:\s]+(.+?)(?:\.\s*|$)', msg)
+        competitors = []
+        if competitors_match:
+            raw_comp = competitors_match.group(1).strip().rstrip(".")
+            competitors = [c.strip() for c in raw_comp.split(",") if c.strip()]
+
+        if brand_name and product_desc and target_audience and benefits:
+            parsed = {
+                "action": "generate",
+                "reply": f"Great! I've got everything I need for {brand_name}. Let me generate your campaign now!",
+                "extracted": {
+                    "brand_name": brand_name,
+                    "product_description": product_desc,
+                    "target_audience": target_audience,
+                    "platform": platform,
+                    "objective": objective,
+                    "tone": tone,
+                    "key_benefits": benefits,
+                    "competitors": competitors,
+                    "visual_style": "",
+                    "brand_colors": [],
+                    "brand_fonts": [],
+                    "campaign_name": "",
+                },
+                "missing_fields": [],
+            }
+            log.info(f"[CHAT-GEN] Regex fallback extracted: brand={brand_name}, audience={target_audience}")
+        else:
+            log.warning(f"[CHAT-GEN] Regex fallback incomplete: brand={brand_name!r}, desc={product_desc!r}, audience={target_audience!r}, benefits={benefits!r}")
+
+    if not parsed:
+        fallback_reply = "I'd love to help you generate a campaign! Tell me about the brand, product, target audience, and preferred tone."
+        is_guest_bool = x_is_guest == "true"
+        chat_db.save_message(session_id, "user", request.message, client_email=x_client_email, is_guest=is_guest_bool)
+        chat_db.save_message(session_id, "assistant", fallback_reply, client_email=x_client_email, is_guest=is_guest_bool)
+        
+        # Both LLM and regex fallback failed — return a friendly message
         return ChatGenerateResponse(
             action="chat",
-            reply="I'd love to help you generate a campaign! Tell me about the brand, product, target audience, and preferred tone.",
+            reply=fallback_reply,
             context={"history": history + [
                 {"role": "user", "content": request.message},
-                {"role": "assistant", "content": "I'd love to help you generate a campaign! Tell me about the brand, product, target audience, and preferred tone."},
+                {"role": "assistant", "content": fallback_reply},
             ]},
             session_id=session_id,
         )
@@ -489,8 +591,9 @@ async def chat_generate(request: ChatGenerateRequest):
             merged[key] = value
 
     # Save chat messages
-    chat_db.save_message(session_id, "user", request.message)
-    chat_db.save_message(session_id, "assistant", reply)
+    is_guest_bool = x_is_guest == "true"
+    chat_db.save_message(session_id, "user", request.message, client_email=x_client_email, is_guest=is_guest_bool)
+    chat_db.save_message(session_id, "assistant", reply, client_email=x_client_email, is_guest=is_guest_bool)
 
     new_history = history + [
         {"role": "user", "content": request.message},
