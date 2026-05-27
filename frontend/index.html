@@ -187,90 +187,148 @@
           <section id="tab-copy" class="output-tab hidden"><div class="section-title">Generated Ad Copy <span id="copy-count-large">0</span></div><div id="copy-output" class="stack"></div></section>
           <section id="tab-concepts" class="output-tab hidden"><div class="section-title">Generated Concepts <span id="concepts-count-large">0</span></div><div id="concepts-output" class="stack"></div></section>
           <section id="tab-reels" class="output-tab hidden">
-            <div class="section-title">Instagram Reels Scripts <span id="reels-count-large">0</span></div>
-            <div id="instagram-ingestion-panel" class="instagram-ingestion-panel">
-              <div class="instagram-ingestion-head">
-                <div>
-                  <p class="panel-kicker">Live ingestion</p>
-                  <h3>Pull reel intelligence into the director</h3>
-                  <p>Queue a background job, then poll until the normalized reel snapshot is ready.</p>
-                </div>
-                <div class="instagram-ingestion-badges">
-                  <span class="metric-pill">Async job</span>
-                  <span class="metric-pill">Normalized reels</span>
-                </div>
+            <div class="section-title">Instagram Viral Reel Intelligence <span id="reels-count-large">0</span></div>
+            <section class="reels-hero-card">
+              <div class="reels-hero-copy">
+                <p class="reels-hero-kicker">AI Reel Strategist</p>
+                <h2>Instagram Viral Reel Intelligence</h2>
+                <p>Analyze viral reels, detect winning hook patterns, compare competitors, predict retention, and generate cinematic reel scripts.</p>
               </div>
+            </section>
 
-              <div class="instagram-ingestion-grid">
-                <label class="field span-2">
-                  <span>Reel URLs</span>
-                  <textarea id="instagram-ingest-reel-urls" placeholder="One reel URL per line or comma-separated"></textarea>
+            <div id="instagram-ingestion-panel" class="instagram-ingestion-panel">
+              <div class="reels-guided-grid">
+                <label class="field span-2 reels-hero-field">
+                  <span>Paste Reel URL</span>
+                  <textarea id="instagram-ingest-reel-urls" placeholder="Paste one or more Instagram Reel URLs"></textarea>
                 </label>
-                <label class="field span-2">
-                  <span>Instagram usernames</span>
-                  <textarea id="instagram-ingest-usernames" placeholder="One username per line or comma-separated"></textarea>
-                </label>
-                <label class="field span-2">
-                  <span>Competitor reels</span>
-                  <textarea id="instagram-ingest-competitor-reels" placeholder="Optional. One reel URL per line for competitor benchmarks."></textarea>
-                </label>
-                <label class="field span-2">
-                  <span>Trending reels</span>
-                  <textarea id="instagram-ingest-trending-reels" placeholder="Optional. One reel URL per line for trend detection."></textarea>
-                </label>
-                <label class="field">
-                  <span>Niche</span>
-                  <input id="instagram-ingest-niche" type="text" placeholder="fitness, beauty, SaaS...">
-                </label>
-                <label class="field">
-                  <span>Audience</span>
-                  <input id="instagram-ingest-audience" type="text" placeholder="founders, creators, buyers...">
-                </label>
-                <label class="field">
-                  <span>Job name</span>
-                  <input id="instagram-ingest-job-name" type="text" placeholder="Weekly competitor ingest">
-                </label>
-                <label class="field">
-                  <span>Max reels</span>
-                  <input id="instagram-ingest-max-reels" type="number" min="1" max="100" value="20">
-                </label>
-                <label class="field">
-                  <span>Cache TTL (sec)</span>
-                  <input id="instagram-ingest-cache-ttl" type="number" min="0" max="86400" value="1800">
-                </label>
-                <label class="field">
-                  <span>Rate limit / minute</span>
-                  <input id="instagram-ingest-rate-limit" type="number" min="1" max="120" value="30">
+                <label class="field span-2 reels-hero-field">
+                  <span>What should we create from this?</span>
+                  <textarea id="instagram-brief" placeholder="Example: Build a 30-second reel for founders, optimized for saves and comments, with a sharp contrarian hook."></textarea>
                 </label>
               </div>
 
               <div class="instagram-ingestion-options">
-                <label class="toggle-pill"><input id="instagram-ingest-include-comments" type="checkbox" checked><span>Include comments</span></label>
-                <label class="toggle-pill"><input id="instagram-ingest-include-metrics" type="checkbox" checked><span>Include metrics</span></label>
-                <label class="toggle-pill"><input id="instagram-ingest-force-refresh" type="checkbox"><span>Force refresh</span></label>
+                <label class="toggle-pill"><input id="instagram-single-reel-mode" type="checkbox"><span>Single Reel Deep Analysis</span></label>
               </div>
 
-              <div class="instagram-ingestion-actions">
-                <button id="instagram-ingest-submit" class="primary-btn" type="button">Start ingestion</button>
-                <button id="instagram-ingest-reset" class="top-pill" type="button">Reset fields</button>
+              <div class="reels-secondary-sources hidden" id="instagram-single-reel-fields">
+                <div class="instagram-ingestion-grid">
+                  <label class="field span-2">
+                    <span>Transcript (recommended for 1 reel)</span>
+                    <textarea id="instagram-single-transcript" placeholder="Paste spoken lines or transcript from the reel"></textarea>
+                  </label>
+                  <label class="field span-2">
+                    <span>Caption text</span>
+                    <textarea id="instagram-single-caption" placeholder="Paste the reel caption to improve hook and CTA analysis"></textarea>
+                  </label>
+                  <label class="field span-2">
+                    <span>Opening hook line (0-2s)</span>
+                    <input id="instagram-single-hook" type="text" placeholder="Example: Nobody tells you this about Instagram growth">
+                  </label>
+                  <label class="field">
+                    <span>Views (optional)</span>
+                    <input id="instagram-single-views" type="number" min="0" placeholder="120000">
+                  </label>
+                  <label class="field">
+                    <span>Likes (optional)</span>
+                    <input id="instagram-single-likes" type="number" min="0" placeholder="5600">
+                  </label>
+                  <label class="field">
+                    <span>Comments (optional)</span>
+                    <input id="instagram-single-comments" type="number" min="0" placeholder="420">
+                  </label>
+                  <label class="field">
+                    <span>Shares (optional)</span>
+                    <input id="instagram-single-shares" type="number" min="0" placeholder="310">
+                  </label>
+                </div>
               </div>
-              <div class="instagram-ingestion-actions" style="margin-top:8px;flex-wrap:wrap;">
-                <button id="instagram-run-analyze" class="top-pill" type="button">Analyze</button>
-                <button id="instagram-run-trends" class="top-pill" type="button">Trends</button>
-                <button id="instagram-run-script" class="top-pill" type="button">Script</button>
-                <button id="instagram-run-direct" class="top-pill" type="button">Direct</button>
-                <button id="instagram-run-score" class="top-pill" type="button">Score</button>
+
+              <div class="reels-hero-actions">
+                <button id="instagram-ingest-submit" class="primary-btn" type="button">Analyze Reel</button>
+                <button id="instagram-add-competitors" class="top-pill" type="button">Upload Competitor Reels</button>
+                <button id="instagram-run-trends" class="top-pill" type="button">Discover Trends</button>
+              </div>
+
+              <div class="reels-secondary-sources hidden" id="instagram-secondary-sources">
+                <div class="instagram-ingestion-grid">
+                  <label class="field span-2">
+                    <span>Competitor reel URLs</span>
+                    <textarea id="instagram-ingest-competitor-reels" placeholder="Optional. Paste competitor reel URLs to compare winning formulas."></textarea>
+                  </label>
+                  <label class="field span-2">
+                    <span>Instagram usernames</span>
+                    <textarea id="instagram-ingest-usernames" placeholder="Optional. Add competitor usernames for broader scanning."></textarea>
+                  </label>
+                  <label class="field span-2">
+                    <span>Trend sample reels</span>
+                    <textarea id="instagram-ingest-trending-reels" placeholder="Optional. Paste trend reels to compare rising formats."></textarea>
+                  </label>
+                  <label class="field">
+                    <span>Niche</span>
+                    <input id="instagram-ingest-niche" type="text" placeholder="fitness, beauty, SaaS...">
+                  </label>
+                  <label class="field">
+                    <span>Audience</span>
+                    <input id="instagram-ingest-audience" type="text" placeholder="founders, creators, buyers...">
+                  </label>
+                </div>
+              </div>
+
+              <details class="reels-advanced-panel">
+                <summary>Advanced source settings</summary>
+                <div class="instagram-ingestion-grid">
+                  <label class="field">
+                    <span>Job name</span>
+                    <input id="instagram-ingest-job-name" type="text" placeholder="Weekly competitor ingest">
+                  </label>
+                  <label class="field">
+                    <span>Max reels</span>
+                    <input id="instagram-ingest-max-reels" type="number" min="1" max="100" value="20">
+                  </label>
+                  <label class="field">
+                    <span>Cache TTL (sec)</span>
+                    <input id="instagram-ingest-cache-ttl" type="number" min="0" max="86400" value="1800">
+                  </label>
+                  <label class="field">
+                    <span>Rate limit / minute</span>
+                    <input id="instagram-ingest-rate-limit" type="number" min="1" max="120" value="30">
+                  </label>
+                </div>
+                <div class="instagram-ingestion-options">
+                  <label class="toggle-pill"><input id="instagram-ingest-include-comments" type="checkbox" checked><span>Include comments</span></label>
+                  <label class="toggle-pill"><input id="instagram-ingest-include-metrics" type="checkbox" checked><span>Include metrics</span></label>
+                  <label class="toggle-pill"><input id="instagram-ingest-force-refresh" type="checkbox"><span>Force refresh</span></label>
+                  <button id="instagram-ingest-reset" class="top-pill" type="button">Reset</button>
+                </div>
+              </details>
+
+              <div class="reels-pipeline-strip" id="instagram-pipeline-strip">
+                <div class="reels-pipeline-step" data-stage="ingest">Ingest</div>
+                <div class="reels-pipeline-step" data-stage="analyze">Analyze</div>
+                <div class="reels-pipeline-step" data-stage="trends">Trends</div>
+                <div class="reels-pipeline-step" data-stage="script">Script</div>
+                <div class="reels-pipeline-step" data-stage="direct">Direct</div>
               </div>
 
               <div class="instagram-ingestion-status">
                 <div class="instagram-ingestion-status-row">
                   <strong id="instagram-ingest-state">Idle</strong>
-                  <span id="instagram-ingest-job-id">No job queued</span>
+                  <span id="instagram-ingest-job-id">Awaiting reel source</span>
                 </div>
                 <div class="instagram-ingest-progress-track">
                   <span id="instagram-ingest-progress-fill" class="instagram-ingest-progress-fill" style="width:0%"></span>
                 </div>
-                <div id="instagram-ingest-message" class="mono">Enter reel URLs or usernames, then start ingestion.</div>
+                <div id="instagram-ingest-message" class="mono">Paste a reel URL and we will ingest, analyze, detect trends, and generate direction automatically.</div>
+              </div>
+
+              <div class="reels-manual-toolbar">
+                <span>Manual reruns</span>
+                <button id="instagram-run-analyze" class="top-pill" type="button">Analyze</button>
+                <button id="instagram-run-script" class="top-pill" type="button">Script</button>
+                <button id="instagram-run-direct" class="top-pill" type="button">Direct</button>
+                <button id="instagram-run-score" class="top-pill" type="button">Score</button>
               </div>
 
               <div id="instagram-ingest-result" class="instagram-ingestion-result"></div>

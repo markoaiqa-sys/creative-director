@@ -10,10 +10,17 @@ class DatabasePool:
         self._dsn = settings.supabase_url
         self._pool: SimpleConnectionPool | None = None
         if self._dsn and self._dsn.startswith("postgresql://"):
+            # Add connection options for stability
+            # connect_timeout: 5 seconds to detect connection issues early
+            # keepalives: 1 (enable TCP keepalives)
+            # keepalives_idle: 30 seconds before sending keepalive
+            # keepalives_interval: 10 seconds between keepalives
+            # keepalives_count: 5 keepalive attempts before giving up
+            dsn_with_options = f"{self._dsn}?connect_timeout=5&keepalives=1&keepalives_idle=30&keepalives_interval=10&keepalives_count=5"
             self._pool = SimpleConnectionPool(
                 minconn=settings.db_pool_min_size,
                 maxconn=settings.db_pool_max_size,
-                dsn=self._dsn,
+                dsn=dsn_with_options,
             )
 
     @property
@@ -28,14 +35,23 @@ class DatabasePool:
 
         conn = self._pool.getconn()
         conn.autocommit = False
+        broken = False
         try:
             yield conn
             conn.commit()
         except Exception:
-            conn.rollback()
+            try:
+                conn.rollback()
+            except Exception:
+                # Connection already closed by server, mark as broken
+                broken = True
             raise
         finally:
-            self._pool.putconn(conn)
+            # If connection is broken, close it; otherwise return to pool
+            if broken:
+                conn.close()
+            else:
+                self._pool.putconn(conn)
 
     def close(self) -> None:
         if self._pool:

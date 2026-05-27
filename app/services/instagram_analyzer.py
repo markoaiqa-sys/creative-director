@@ -58,6 +58,7 @@ class InstagramAnalyzer:
             *request.trending_reels,
             *[reel.to_reference() for reel in request.normalized_reels],
         ]
+        quality = self._quality_summary(request)
         analysis = self._pattern_engine.build_insights(
             brief=request.brief,
             references=reference_pool,
@@ -85,6 +86,16 @@ class InstagramAnalyzer:
             brand_name=request.brand_name,
             niche=request.niche,
             audience=request.audience,
+            data_quality_score=quality["score"],
+            confidence_label=quality["label"],
+            warning_message=quality["warning"],
+            pipeline_steps=[
+                "Reel sources ingested",
+                "Hook and viral pattern analysis completed",
+                "Trend signals clustered",
+                "Competitor formulas compared",
+                "Retention and virality scored",
+            ],
             viral_probability_score=max(score.virality, score.total_score),
             hook_strength_score=score.hook_strength,
             audience_retention_prediction=score.retention,
@@ -102,6 +113,8 @@ class InstagramAnalyzer:
             hashtags=self._hashtags_from_request(request),
             thumbnail_text=request.hook_angle or request.brief[:36],
             scores=score,
+            retention_curve=self._build_retention_curve(score.retention, quality["score"]),
+            replay_spike_curve=self._build_replay_curve(score.shareability, score.curiosity_gap),
             audio_trend=trend_objects[0].trend_name if trend_objects else request.audio_trend_hint,
             caption_pattern=analysis[6].insight if len(analysis) > 6 else None,
         )
@@ -129,6 +142,56 @@ class InstagramAnalyzer:
         return " | ".join(parts)
 
     @staticmethod
+    def _quality_summary(request: InstagramReelsRequest) -> dict[str, int | str | None]:
+        normalized = request.normalized_reels or []
+        reel_count = len(normalized)
+        transcript_count = len([item for item in normalized if item.transcript])
+        caption_count = len([item for item in normalized if item.caption])
+        metric_count = len([item for item in normalized if item.engagement and any([
+            item.engagement.views,
+            item.engagement.likes,
+            item.engagement.shares,
+            item.engagement.saves,
+        ])])
+        visual_signal_count = len([item for item in normalized if item.visual_hooks or item.retention_signals or item.caption_patterns])
+        direct_refs = len(request.reference_reels) + len(request.competitor_reels) + len(request.trending_reels)
+        manual_transcript = 1 if request.transcript and request.transcript.strip() else 0
+        manual_caption = 1 if request.caption and request.caption.strip() else 0
+        manual_hook = 1 if request.hook_angle and request.hook_angle.strip() else 0
+        manual_context_score = manual_transcript * 28 + manual_caption * 18 + manual_hook * 16
+
+        score = min(
+            100,
+            reel_count * 8
+            + transcript_count * 14
+            + caption_count * 8
+            + metric_count * 8
+            + visual_signal_count * 10
+            + direct_refs * 5
+            + manual_context_score,
+        )
+        if request.single_reel_mode and reel_count <= 1 and manual_context_score > 0:
+            score = min(100, score + 12)
+        if score >= 75:
+            label = "High"
+            warning = None
+        elif score >= 45:
+            label = "Medium"
+            warning = (
+                "Analysis is directionally useful. For single-reel mode, add transcript, caption, and opening hook to increase confidence."
+                if request.single_reel_mode
+                else "Analysis is directionally useful, but more reels, transcripts, or metrics would improve accuracy."
+            )
+        else:
+            label = "Low"
+            warning = (
+                "Single-reel mode needs richer context. Add transcript, caption text, and opening hook to improve analysis."
+                if request.single_reel_mode
+                else "Not enough reel data for strong analysis yet. Add more reels, competitor samples, or richer transcript/caption inputs."
+            )
+        return {"score": score, "label": label, "warning": warning}
+
+    @staticmethod
     def _build_assumptions(request: InstagramReelsRequest) -> list[str]:
         assumptions = []
         if not request.normalized_reels:
@@ -139,7 +202,23 @@ class InstagramAnalyzer:
             assumptions.append("Trend objects are biased toward the provided trend samples.")
         if request.normalized_reels:
             assumptions.append(f"Analysis includes {len(request.normalized_reels)} normalized reel records from ingestion context.")
+        if request.single_reel_mode:
+            assumptions.append("Single reel deep analysis mode is active; confidence is boosted by manual transcript/caption/hook context.")
         return assumptions
+
+    @staticmethod
+    def _build_retention_curve(retention_score: int, quality_score: int) -> list[int]:
+        opening = min(100, max(62, retention_score + 14))
+        mid = max(28, opening - max(18, 32 - quality_score // 4))
+        payoff = max(24, mid - 8)
+        cta = max(18, payoff - 6)
+        return [opening, max(opening - 12, mid + 6), mid, max(mid - 5, payoff + 4), payoff, cta]
+
+    @staticmethod
+    def _build_replay_curve(shareability: int, curiosity_gap: int) -> list[int]:
+        base = max(10, curiosity_gap // 3)
+        spike = min(100, base + shareability // 2)
+        return [base, min(100, base + 8), spike, max(base, spike - 16), min(100, base + 12), max(8, base - 2)]
 
     @staticmethod
     def _caption_from_request(request: InstagramReelsRequest) -> str:

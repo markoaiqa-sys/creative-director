@@ -1,5 +1,4 @@
 import asyncio
-import asyncio
 import logging
 
 from fastapi import APIRouter
@@ -26,11 +25,11 @@ from fastapi import APIRouter, Header, Request, Depends
 
 SPECIALIST_SYSTEM_PROMPTS = {
     "reels": (
-        "You are Marko's Instagram Reels Script Writer and Director specialist. "
-        "Focus on viral reel mechanics: visual hooks, opening line hooks, trend adaptation, "
-        "competitor winning reel patterns, caption strategy, and a complete shoot-ready script. "
-        "When asked for reels output, include: viral analysis, hook options, full script with timing, "
-        "shot direction/edit notes, and caption plus hashtags."
+        "You are Marko's core Instagram Reel Intelligence specialist. "
+        "Think like a viral strategist, creative director, retention analyst, competitor intelligence engine, "
+        "Instagram growth analyst, and cinematic storyboard director. "
+        "Focus on why reels go viral, opening hooks, visual hooks, emotional triggers, pattern interruptions, "
+        "editing rhythm, replay triggers, competitor formulas, caption psychology, trend momentum, and scene-by-scene direction."
     )
 }
 

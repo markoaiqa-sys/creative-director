@@ -160,9 +160,20 @@ let instagramIngestionPollHandle = null;
 let instagramIngestionJobId = null;
 let instagramIngestionJobState = null;
 let instagramIngestionResultState = null;
+let instagramAutoPipelineRunning = false;
 
 const instagramIngestionControls = {
   reelUrls: () => byId("instagram-ingest-reel-urls"),
+  brief: () => byId("instagram-brief"),
+  singleMode: () => byId("instagram-single-reel-mode"),
+  singleFields: () => byId("instagram-single-reel-fields"),
+  singleTranscript: () => byId("instagram-single-transcript"),
+  singleCaption: () => byId("instagram-single-caption"),
+  singleHook: () => byId("instagram-single-hook"),
+  singleViews: () => byId("instagram-single-views"),
+  singleLikes: () => byId("instagram-single-likes"),
+  singleComments: () => byId("instagram-single-comments"),
+  singleShares: () => byId("instagram-single-shares"),
   usernames: () => byId("instagram-ingest-usernames"),
   competitorReels: () => byId("instagram-ingest-competitor-reels"),
   trendingReels: () => byId("instagram-ingest-trending-reels"),
@@ -182,6 +193,9 @@ const instagramIngestionControls = {
   progress: () => byId("instagram-ingest-progress-fill"),
   message: () => byId("instagram-ingest-message"),
   result: () => byId("instagram-ingest-result"),
+  secondarySources: () => byId("instagram-secondary-sources"),
+  addCompetitors: () => byId("instagram-add-competitors"),
+  pipelineStrip: () => byId("instagram-pipeline-strip"),
   runAnalyze: () => byId("instagram-run-analyze"),
   runTrends: () => byId("instagram-run-trends"),
   runScript: () => byId("instagram-run-script"),
@@ -651,159 +665,308 @@ function list(target, items, render) {
   target.innerHTML = items.map((item, index) => render(item, index)).join("");
 }
 
+function clampReelScore(value) {
+  const number = Number(value);
+  if (Number.isNaN(number)) return 0;
+  return Math.max(0, Math.min(100, number));
+}
+
+function findInsightByCategory(items, category) {
+  return (items || []).find((item) => String(item.category || "").toLowerCase() === category) || null;
+}
+
+function renderCurveBars(values, tone) {
+  const palette = tone === "replay" ? ["72%", "84%", "66%", "54%", "78%", "48%"] : ["100%", "88%", "72%", "64%", "52%", "38%"];
+  return `
+    <div class="reels-curve">
+      ${(values || []).map((value, index) => `
+        <div class="reels-curve-col">
+          <span class="reels-curve-bar ${tone === "replay" ? "is-replay" : ""}" style="height:${Math.max(16, clampReelScore(value))}%"></span>
+          <small>${esc(palette[index] || `${index + 1}`)}</small>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
 function renderReelsAnalysis(analysis) {
   if (!reelsOutput) return;
   if (!analysis) {
-    empty(reelsOutput, "No reels analysis available yet.");
+    reelsOutput.innerHTML = `
+      <div class="reels-empty-state">
+        <h3>No reel intelligence yet</h3>
+        <p>Paste a reel URL, describe what you want to create, and the system will ingest, analyze, detect trends, and generate a directed script automatically.</p>
+      </div>
+    `;
     setCount("reels", 0);
     return;
   }
 
-  if (resultsTitle) resultsTitle.textContent = analysis.title || "Instagram Reels Intelligence";
-  if (liveStatus) liveStatus.textContent = analysis.summary || "Structured reel strategy ready.";
+  if (resultsTitle) resultsTitle.textContent = analysis.title || "Instagram Viral Reel Intelligence";
+  if (liveStatus) liveStatus.textContent = analysis.summary || "Viral reel intelligence ready.";
 
-  const block = (title, rows) => `
-    <div class="card">
-      <h3>${esc(title)}</h3>
-      <div>${rows}</div>
-    </div>
-  `;
-
-  const listRows = (items) =>
-    (items || []).length
-      ? `<ul>${items.map((x) => `<li>${esc(typeof x === "string" ? x : JSON.stringify(x))}</li>`).join("")}</ul>`
-      : "<p>-</p>";
-
+  const analysisItems = analysis.analysis || [];
   const score = analysis.scores || {};
-  const scoreFields = [
-    ["Hook Strength", score.hook_strength],
-    ["Virality", score.virality],
-    ["Retention", score.retention],
+  const timeline = analysis.second_by_second_timeline || analysis.full_script || analysis.script?.scene_by_scene_direction || [];
+  const script = analysis.script || {};
+  const hookInsight = findInsightByCategory(analysisItems, "opening_line");
+  const visualInsight = findInsightByCategory(analysisItems, "visual_hook");
+  const emotionalInsight = findInsightByCategory(analysisItems, "emotional_trigger");
+  const captionInsight = findInsightByCategory(analysisItems, "caption_pattern");
+  const ctaInsight = findInsightByCategory(analysisItems, "cta_style");
+  const topCompetitor = (analysis.competitor_winning_reels || [])[0];
+  const topTrend = (analysis.trend_objects || [])[0];
+
+  const scoreCards = [
+    ["Curiosity", score.curiosity_gap],
+    ["Emotional Trigger", score.emotional_impact],
+    ["Replayability", analysis.replay_spike_curve?.[2] ?? score.shareability],
     ["Shareability", score.shareability],
-    ["Emotional Impact", score.emotional_impact],
-    ["Curiosity Gap", score.curiosity_gap],
-    ["Thumbnail Quality", score.thumbnail_quality],
-    ["CTA Effectiveness", score.cta_effectiveness],
+    ["Watch Retention", score.retention],
+    ["Comment Bait", score.cta_effectiveness],
+    ["Save Potential", score.virality],
   ];
 
-  const clampScore = (value) => {
-    const number = Number(value);
-    if (Number.isNaN(number)) return 0;
-    return Math.max(0, Math.min(100, number));
-  };
+  const warningBanner = analysis.warning_message
+    ? `
+      <div class="reels-warning-banner">
+        <strong>${esc(analysis.confidence_label || "Low")} confidence analysis</strong>
+        <p>${esc(analysis.warning_message)}</p>
+      </div>
+    `
+    : "";
 
-  const scoreGrid = `
-    <div class="reel-score-grid">
-      ${scoreFields.map(([label, value]) => `
-        <div class="reel-score-card">
-          <span>${esc(label)}</span>
-          <strong>${esc(clampScore(value))}</strong>
+  const hookSection = `
+    <section class="reels-dashboard-section">
+      <div class="reels-section-head">
+        <div>
+          <p class="panel-kicker">Section A</p>
+          <h3>Viral Hook Analysis</h3>
         </div>
-      `).join("")}
-    </div>
-  `;
-
-  const retentionGraph = `
-    <div class="reel-meter-list">
-      ${scoreFields.map(([label, value]) => `
-        <div class="reel-meter">
-          <div class="reel-meter-head"><span>${esc(label)}</span><strong>${esc(clampScore(value))}</strong></div>
-          <div class="reel-meter-track"><span class="reel-meter-fill" style="width:${clampScore(value)}%"></span></div>
-        </div>
-      `).join("")}
-    </div>
-  `;
-
-  const analysisRows = (analysis.analysis || []).length
-    ? `<div class="reel-compare-grid">${analysis.analysis.map((x) => `
-        <div class="reel-mini-card">
-          <div class="reel-mini-label">${esc(humanizeToken(x.category || "analysis"))}</div>
-          <h4>${esc(x.insight || "-")}</h4>
-          <p>${esc(x.why_it_works || "-")}</p>
-          <div class="mono">Score: ${esc(x.score ?? "-")} | ${esc(x.recommendation || "-")}</div>
-        </div>
-      `).join("")}</div>`
-    : "<p>-</p>";
-
-  const competitorRows = (analysis.competitor_winning_reels || []).length
-    ? `<div class="reel-compare-grid">${analysis.competitor_winning_reels.map((x) => `
-        <div class="reel-mini-card">
-          <div class="reel-mini-label">${esc(x.competitor || "-")}</div>
-          <h4>${esc(x.hook_format || "-")}</h4>
-          <p>${esc(x.winning_pattern || "-")}</p>
-          <div class="mono">CTA: ${esc(x.cta_strategy || "-")} | Formula: ${esc(x.reusable_formula || "-")}</div>
-        </div>
-      `).join("")}</div>`
-    : "<p>-</p>";
-
-  const trendRows = (analysis.trend_objects || []).length
-    ? `<div class="reel-compare-grid">${analysis.trend_objects.map((x) => `
-        <div class="reel-mini-card">
-          <div class="reel-mini-label">${esc(x.trend_name || "-")}</div>
-          <h4>${esc(x.trend_score ?? "-")} / ${esc(x.viral_probability ?? "-")}</h4>
-          <p>Saturation: ${esc(x.saturation_level || "-")}</p>
-          <div class="mono">Best niches: ${(x.best_niches || []).map((n) => esc(n)).join(", ") || "-"}</div>
-        </div>
-      `).join("")}</div>`
-    : "<p>-</p>";
-
-  const timelineRows = (analysis.second_by_second_timeline || analysis.full_script || analysis.script?.scene_by_scene_direction || []).length
-    ? `<div class="reel-timeline">${(analysis.second_by_second_timeline || analysis.full_script || analysis.script?.scene_by_scene_direction || []).map((x) => `
-        <div class="reel-timeline-item${x.interruption_pattern ? " is-critical" : ""}">
-          <div class="reel-timeline-second">${esc(x.second_range || x.second || "-")}</div>
-          <div class="reel-timeline-body">
-            <strong>${esc(x.scene || "-")}</strong>
-            <p>${esc(x.camera_direction || x.direction || "-")}</p>
-            <div class="mono">${esc(x.retention_note || x.dialogue_or_text || "-")}</div>
+        <div class="reels-confidence-chip">Data quality ${esc(clampReelScore(analysis.data_quality_score))}/100</div>
+      </div>
+      <div class="reels-hook-grid">
+        <div class="reels-hook-hero">
+          <div class="reels-hook-type">${esc(hookInsight?.insight || analysis.hook_alternatives?.[0] || "No opening hook captured yet")}</div>
+          <div class="reels-hook-score">
+            <span>Hook Strength</span>
+            <strong>${esc(clampReelScore(analysis.hook_strength_score))}/100</strong>
           </div>
+          <p>${esc(hookInsight?.why_it_works || "The opening line should create an immediate information gap or a sharp promise.")}</p>
         </div>
-      `).join("")}</div>`
-    : "<p>-</p>";
-
-  const hookRows = (analysis.hook_alternatives || []).length
-    ? `<div class="reel-compare-grid">${analysis.hook_alternatives.map((hook) => `
-        <div class="reel-mini-card">
-          <div class="reel-mini-label">Hook Option</div>
-          <h4>${esc(hook)}</h4>
+        <div class="reels-hook-facts">
+          <div class="reels-signal-card"><span>Visual hook</span><strong>${esc(visualInsight?.insight || "No visual hook extracted")}</strong></div>
+          <div class="reels-signal-card"><span>Emotional trigger</span><strong>${esc(emotionalInsight?.insight || "Not enough evidence yet")}</strong></div>
+          <div class="reels-signal-card"><span>Curiosity gap</span><strong>${esc(`${clampReelScore(score.curiosity_gap)}/100`)}</strong></div>
+          <div class="reels-signal-card"><span>Retention prediction</span><strong>${esc(`${clampReelScore(analysis.audience_retention_prediction || analysis.retention_score)}/100`)}</strong></div>
         </div>
-      `).join("")}</div>`
-    : "<p>-</p>";
-
-  const script = analysis.script || {};
-  const scriptRows = `
-    <div class="summary-stack">
-      <div><strong>${esc(script.title || analysis.title || "Reel Script")}</strong></div>
-      <div>${esc(script.spoken_script || analysis.instagram_caption || "-")}</div>
-      <div class="mono">CTA: ${esc(script.cta || "-")} | Thumbnail: ${esc(script.thumbnail_text || analysis.thumbnail_text || "-")}</div>
-      <div class="mono">Retention: ${esc(script.retention_strategy_explanation || "-")}</div>
-    </div>
+      </div>
+    </section>
   `;
 
-  const audienceSignals = `
-    <div class="summary-stack">
-      <div><strong>${esc(analysis.brand_name || "-")}</strong></div>
-      <div>${esc(analysis.summary || "-")}</div>
-      <div class="mono">Audience: ${esc(analysis.audience || "-")} | Niche: ${esc(analysis.niche || "-")}</div>
-      <div class="mono">Probability: ${esc(analysis.viral_probability_score ?? "-")} | Retention: ${esc(analysis.retention_score ?? analysis.audience_retention_prediction ?? "-")}</div>
-    </div>
+  const timelineSection = `
+    <section class="reels-dashboard-section">
+      <div class="reels-section-head">
+        <div>
+          <p class="panel-kicker">Section B</p>
+          <h3>Visual Hook Timeline</h3>
+        </div>
+      </div>
+      <div class="reels-flow-track">
+        ${timeline.length ? timeline.map((beat) => `
+          <article class="reels-flow-card${beat.interruption_pattern ? " is-critical" : ""}">
+            <span>${esc(beat.second_range || "-")}</span>
+            <strong>${esc(beat.scene || "-")}</strong>
+            <p>${esc(beat.camera_direction || "-")}</p>
+            <small>${esc((beat.text_overlay || [])[0] || beat.retention_note || "-")}</small>
+          </article>
+        `).join("") : `<div class="reels-empty-inline">Timeline will appear after analysis.</div>`}
+      </div>
+    </section>
   `;
 
-  reelsOutput.innerHTML = [
-    block("Audience Signals", audienceSignals),
-    block("Viral Score Cards", scoreGrid),
-    block("Retention Graph", retentionGraph),
-    block("Hook Comparisons", hookRows),
-    block("Analysis", analysisRows),
-    block("Competitor Insights", competitorRows),
-    block("Trending Formats", trendRows),
-    block("Scene Timeline", timelineRows),
-    block("Script Pack", scriptRows),
-    block("Top Patterns", listRows(analysis.top_performing_patterns || analysis.reusable_winning_formulas)),
-    block("Director Notes", listRows(analysis.director_notes)),
-    block("Recommendations", listRows(analysis.recommendations)),
-    block("Assumptions", listRows(analysis.assumptions)),
-  ].join("");
-  setCount("reels", Math.max(1, (analysis.analysis || []).length, (analysis.trend_objects || []).length, (analysis.competitor_winning_reels || []).length));
+  const retentionSection = `
+    <section class="reels-dashboard-section">
+      <div class="reels-section-head">
+        <div>
+          <p class="panel-kicker">Section C</p>
+          <h3>Retention Graph</h3>
+        </div>
+      </div>
+      <div class="reels-graph-grid">
+        <div class="reels-graph-card">
+          <span>Predicted retention arc</span>
+          ${renderCurveBars(analysis.retention_curve || [], "retention")}
+        </div>
+        <div class="reels-graph-card">
+          <span>Replay and dopamine spikes</span>
+          ${renderCurveBars(analysis.replay_spike_curve || [], "replay")}
+        </div>
+        <div class="reels-graph-meta">
+          <div class="reels-signal-card"><span>Drop-off risk</span><strong>${esc(analysis.retention_critical_moments?.[0] || "Not enough signal yet")}</strong></div>
+          <div class="reels-signal-card"><span>Replay spike</span><strong>${esc(analysis.dopamine_spikes?.[0] || "Awaiting stronger signal")}</strong></div>
+        </div>
+      </div>
+    </section>
+  `;
+
+  const competitorSection = `
+    <section class="reels-dashboard-section">
+      <div class="reels-section-head">
+        <div>
+          <p class="panel-kicker">Section D</p>
+          <h3>Competitor Intelligence</h3>
+        </div>
+      </div>
+      <div class="reels-compare-grid">
+        ${topCompetitor ? `
+          <article class="reels-competitor-hero">
+            <span>Top competitor formula</span>
+            <h4>${esc(topCompetitor.competitor || "Competitor")}</h4>
+            <p>${esc(topCompetitor.winning_pattern || "-")}</p>
+            <div class="mono">Hook: ${esc(topCompetitor.hook_format || "-")} | CTA: ${esc(topCompetitor.cta_strategy || "-")}</div>
+            <div class="mono">Viral probability: ${esc(topCompetitor.score ?? "-")}/100</div>
+          </article>
+        ` : `<div class="reels-empty-inline">Add competitor reels or usernames to compare winning formulas.</div>`}
+        ${(analysis.competitor_winning_reels || []).slice(0, 3).map((item) => `
+          <article class="reel-mini-card">
+            <div class="reel-mini-label">${esc(item.competitor || "Competitor")}</div>
+            <h4>${esc(item.hook_format || "-")}</h4>
+            <p>${esc(item.why_it_wins || "-")}</p>
+            <div class="mono">${esc(item.reusable_formula || "-")}</div>
+          </article>
+        `).join("")}
+      </div>
+    </section>
+  `;
+
+  const trendSection = `
+    <section class="reels-dashboard-section">
+      <div class="reels-section-head">
+        <div>
+          <p class="panel-kicker">Section E</p>
+          <h3>Trend Intelligence</h3>
+        </div>
+      </div>
+      <div class="reels-trend-grid">
+        ${(analysis.trend_objects || []).length ? (analysis.trend_objects || []).slice(0, 4).map((trend, index) => `
+          <article class="reels-trend-card">
+            <div class="reels-trend-top">
+              <strong>${esc(trend.trend_name || "-")}</strong>
+              <span class="reels-trend-badge ${index === 0 ? "is-rising" : trend.saturation_level === "high" ? "is-hot" : ""}">${esc(trend.saturation_level || "unknown")}</span>
+            </div>
+            <div class="reels-trend-metric">
+              <span>Momentum</span>
+              <strong>${esc(clampReelScore(trend.trend_score))}</strong>
+            </div>
+            <p>${esc((trend.hook_examples || [])[0] || "No hook example returned.")}</p>
+            <div class="mono">${esc((trend.caption_patterns || []).join(" | ") || "No caption pattern")}</div>
+          </article>
+        `).join("") : `<div class="reels-empty-inline">Trend clusters will appear after enough reels or trend references are available.</div>`}
+      </div>
+      ${topTrend ? `<div class="reels-opportunity-bar">Emerging opportunity: ${esc(topTrend.trend_name)} with ${esc(topTrend.viral_probability)}/100 viral probability.</div>` : ""}
+    </section>
+  `;
+
+  const dnaSection = `
+    <section class="reels-dashboard-section">
+      <div class="reels-section-head">
+        <div>
+          <p class="panel-kicker">Section F</p>
+          <h3>Reel DNA / Viral Score</h3>
+        </div>
+      </div>
+      <div class="reel-score-grid">
+        ${scoreCards.map(([label, value]) => `
+          <div class="reel-score-card">
+            <span>${esc(label)}</span>
+            <strong>${esc(clampReelScore(value))}</strong>
+          </div>
+        `).join("")}
+      </div>
+    </section>
+  `;
+
+  const cinematicSection = `
+    <section class="reels-dashboard-section">
+      <div class="reels-section-head">
+        <div>
+          <p class="panel-kicker">Section G</p>
+          <h3>Cinematic Script Output</h3>
+        </div>
+      </div>
+      <div class="reels-scene-stack">
+        ${timeline.length ? timeline.map((beat, index) => `
+          <article class="reels-scene-card">
+            <div class="reels-scene-head">
+              <span>Scene ${index + 1} (${esc(beat.second_range || "-")})</span>
+              <strong>${esc(beat.scene || "-")}</strong>
+            </div>
+            <div class="reels-scene-body">
+              <p><strong>Dialogue:</strong> ${esc((beat.text_overlay || [])[0] || script.spoken_script || "-")}</p>
+              <p><strong>Camera:</strong> ${esc(beat.camera_direction || "-")}</p>
+              <p><strong>Subtitle:</strong> ${esc((beat.text_overlay || [])[0] || "-")}</p>
+              <p><strong>Editing:</strong> ${esc((beat.editing_notes || []).join(", ") || "-")}</p>
+              <p><strong>Music cue:</strong> ${esc((beat.sound_design || []).join(", ") || "-")}</p>
+            </div>
+          </article>
+        `).join("") : `<div class="reels-empty-inline">Directed scenes will appear after script generation.</div>`}
+      </div>
+    </section>
+  `;
+
+  const storyboardSection = `
+    <section class="reels-dashboard-section">
+      <div class="reels-section-head">
+        <div>
+          <p class="panel-kicker">Section H</p>
+          <h3>Storyboard View</h3>
+        </div>
+      </div>
+      <div class="reels-storyboard-flow">
+        ${[
+          { label: "Hook", value: hookInsight?.insight || analysis.hook_alternatives?.[0] || "Opening hook not extracted yet" },
+          { label: "Curiosity", value: emotionalInsight?.insight || "Curiosity beat pending" },
+          { label: "Payoff", value: analysis.recommendations?.[0] || "Proof and payoff guidance will appear here" },
+          { label: "CTA", value: script.cta || ctaInsight?.insight || "CTA pending" },
+        ].map((item) => `
+          <article class="reels-storyboard-card">
+            <span>${esc(item.label)}</span>
+            <strong>${esc(item.value)}</strong>
+          </article>
+        `).join("")}
+      </div>
+      <div class="reels-caption-bar">
+        <div><strong>Caption pattern:</strong> ${esc(captionInsight?.insight || analysis.caption_pattern || "No caption pattern yet")}</div>
+        <div><strong>Instagram caption:</strong> ${esc(analysis.instagram_caption || script.instagram_caption || "-")}</div>
+      </div>
+    </section>
+  `;
+
+  reelsOutput.innerHTML = `
+    ${warningBanner}
+    <section class="reels-intelligence-header">
+      <div>
+        <p class="panel-kicker">AI Reel Intelligence</p>
+        <h3>${esc(analysis.brand_name || "Instagram Reel Analysis")}</h3>
+        <p>${esc(analysis.summary || "Analyze why this reel works and how to build a stronger version.")}</p>
+      </div>
+      <div class="reels-intelligence-meta">
+        <div class="reels-meta-card"><span>Confidence</span><strong>${esc(analysis.confidence_label || "Low")}</strong></div>
+        <div class="reels-meta-card"><span>Virality</span><strong>${esc(clampReelScore(analysis.viral_probability_score))}</strong></div>
+        <div class="reels-meta-card"><span>Retention</span><strong>${esc(clampReelScore(analysis.retention_score || analysis.audience_retention_prediction))}</strong></div>
+      </div>
+    </section>
+    ${hookSection}
+    ${timelineSection}
+    ${retentionSection}
+    ${competitorSection}
+    ${trendSection}
+    ${dnaSection}
+    ${cinematicSection}
+    ${storyboardSection}
+  `;
+  setCount("reels", Math.max(1, analysisItems.length, (analysis.trend_objects || []).length, (analysis.competitor_winning_reels || []).length));
 }
 
 function splitMultivalue(value) {
@@ -819,6 +982,60 @@ function parseBoundedNumber(value, fallback, min, max) {
   return Math.max(min, Math.min(max, parsed));
 }
 
+function setInstagramPipelineStage(stage, status = "idle") {
+  const strip = instagramIngestionControls.pipelineStrip();
+  if (!strip) return;
+  const order = ["ingest", "analyze", "trends", "script", "direct"];
+  const currentIndex = order.indexOf(stage);
+  strip.querySelectorAll(".reels-pipeline-step").forEach((node) => {
+    const step = node.dataset.stage;
+    const stepIndex = order.indexOf(step);
+    node.classList.remove("is-active", "is-done", "is-error");
+    if (status === "error" && step === stage) {
+      node.classList.add("is-error");
+      return;
+    }
+    if (stepIndex < currentIndex || (step === stage && status === "done")) {
+      node.classList.add("is-done");
+    } else if (step === stage && status === "active") {
+      node.classList.add("is-active");
+    }
+  });
+}
+
+async function runInstagramAutoPipeline() {
+  if (instagramAutoPipelineRunning) return;
+  instagramAutoPipelineRunning = true;
+  try {
+    setInstagramPipelineStage("analyze", "active");
+    setInstagramIngestionStatus(instagramIngestionJobState, "Ingestion complete. Analyzing hook and retention patterns...");
+    const analyzeData = await runInstagramStage("analyze", { silentChat: true });
+
+    setInstagramPipelineStage("analyze", "done");
+    setInstagramPipelineStage("trends", "active");
+    setInstagramIngestionStatus(instagramIngestionJobState, "Trend signals detected. Mapping competitor and format patterns...");
+    setInstagramPipelineStage("trends", "done");
+    setInstagramPipelineStage("script", "active");
+    setInstagramIngestionStatus(instagramIngestionJobState, "Generating cinematic script and scene logic...");
+
+    const directData = await runInstagramStage("direct", { silentChat: true });
+    const finalData = directData || analyzeData;
+
+    setInstagramPipelineStage("script", "done");
+    setInstagramPipelineStage("direct", "active");
+    setInstagramPipelineStage("direct", "done");
+    setInstagramIngestionStatus(instagramIngestionJobState, "Intelligence dashboard ready. Viral hook, trend, competitor, and script analysis loaded.", "success");
+    if (finalData) {
+      renderReelsAnalysis(finalData);
+    }
+  } catch (error) {
+    setInstagramPipelineStage("direct", "error");
+    setInstagramIngestionStatus(instagramIngestionJobState, error.message || "Auto-pipeline failed while building reel intelligence.", "error");
+  } finally {
+    instagramAutoPipelineRunning = false;
+  }
+}
+
 function clearInstagramIngestionPoll() {
   if (instagramIngestionPollHandle) {
     clearTimeout(instagramIngestionPollHandle);
@@ -830,6 +1047,15 @@ function setInstagramIngestionDisabled(disabled) {
   const controls = [
     instagramIngestionControls.submit(),
     instagramIngestionControls.reset(),
+    instagramIngestionControls.brief(),
+    instagramIngestionControls.singleMode(),
+    instagramIngestionControls.singleTranscript(),
+    instagramIngestionControls.singleCaption(),
+    instagramIngestionControls.singleHook(),
+    instagramIngestionControls.singleViews(),
+    instagramIngestionControls.singleLikes(),
+    instagramIngestionControls.singleComments(),
+    instagramIngestionControls.singleShares(),
     instagramIngestionControls.reelUrls(),
     instagramIngestionControls.usernames(),
     instagramIngestionControls.competitorReels(),
@@ -843,6 +1069,12 @@ function setInstagramIngestionDisabled(disabled) {
     instagramIngestionControls.includeComments(),
     instagramIngestionControls.includeMetrics(),
     instagramIngestionControls.forceRefresh(),
+    instagramIngestionControls.addCompetitors(),
+    instagramIngestionControls.runAnalyze(),
+    instagramIngestionControls.runTrends(),
+    instagramIngestionControls.runScript(),
+    instagramIngestionControls.runDirect(),
+    instagramIngestionControls.runScore(),
   ];
   controls.forEach((control) => {
     if (control) control.disabled = disabled;
@@ -858,7 +1090,7 @@ function setInstagramIngestionStatus(job, message, kind = "neutral") {
   if (stateEl) {
     const stateLabel = job?.status ? humanizeToken(job.status) : "Idle";
     stateEl.textContent = stateLabel;
-    stateEl.style.color = kind === "error" ? "#b42318" : kind === "success" ? "#027a48" : "#101828";
+    stateEl.style.color = kind === "error" ? "#f87171" : kind === "success" ? "#4ade80" : "#ffffff";
   }
 
   if (jobIdEl) {
@@ -884,7 +1116,7 @@ function renderInstagramIngestionResult(result) {
   if (!result) {
     container.innerHTML = `
       <div class="card instagram-ingestion-empty">
-        <p>Run an ingestion job to see normalized reels, trend snapshots, and competitor insights here.</p>
+        <p>Source intelligence will appear here once a reel is scanned. We will summarize source quality, detected captions, trend cues, and competitor signals before generating the final dashboard.</p>
       </div>
     `;
     return;
@@ -899,38 +1131,44 @@ function renderInstagramIngestionResult(result) {
       ? `<div class="instagram-chip-list">${items.map((item) => `<span class="metric-pill">${esc(item)}</span>`).join("")}</div>`
       : `<div class="mono">${esc(emptyLabel)}</div>`;
 
+  const sourceStrength = Math.min(
+    100,
+    reels.length * 10
+      + (result.caption_patterns || []).length * 9
+      + (result.audio_patterns || []).length * 8
+      + (result.hook_library || []).length * 6
+      + insights.length * 7
+  );
   const reelCards = reels.length
-    ? `<div class="instagram-ingestion-reel-list">${reels.slice(0, 5).map((reel) => `
+    ? `<div class="instagram-ingestion-reel-list">${reels.slice(0, 3).map((reel) => `
         <div class="instagram-ingestion-reel-card">
           <div class="instagram-ingestion-reel-head">
-            <strong>${esc(reel.username || reel.competitor_name || reel.reel_id || "Reel")}</strong>
-            <span>${esc(reel.hook_type || reel.source_type || "normalized")}</span>
+            <strong>${esc(reel.username || reel.competitor_name || reel.reel_id || "Reel source")}</strong>
+            <span>${esc(reel.hook_type || reel.source_type || "source")}</span>
           </div>
-          <p>${esc(reel.hook_text || reel.caption || "No hook text captured.")}</p>
-          <div class="mono">${esc(reel.reel_url || reel.source || "")}</div>
+          <p>${esc(reel.hook_text || reel.caption || reel.transcript || "No transcript or hook text extracted yet.")}</p>
           <div class="instagram-ingestion-reel-metrics">
-            <span>Views: ${esc(reel.engagement?.views ?? "-")}</span>
-            <span>Likes: ${esc(reel.engagement?.likes ?? "-")}</span>
-            <span>Comments: ${esc(reel.engagement?.comments ?? "-")}</span>
-            <span>Shares: ${esc(reel.engagement?.shares ?? "-")}</span>
+            <span>Views ${esc(reel.engagement?.views ?? "-")}</span>
+            <span>Likes ${esc(reel.engagement?.likes ?? "-")}</span>
+            <span>Shares ${esc(reel.engagement?.shares ?? "-")}</span>
           </div>
         </div>
       `).join("")}</div>`
-    : '<div class="card"><p>No normalized reels returned.</p></div>';
+    : '<div class="card"><p>No usable reel sources were extracted yet.</p></div>';
 
   container.innerHTML = `
     <div class="card instagram-ingestion-summary-card">
       <div class="instagram-ingestion-summary-grid">
-        <div class="instagram-ingestion-summary-metric"><span>Reels</span><strong>${esc(reels.length)}</strong></div>
-        <div class="instagram-ingestion-summary-metric"><span>Trends</span><strong>${esc(trends.length)}</strong></div>
-        <div class="instagram-ingestion-summary-metric"><span>Competitors</span><strong>${esc(insights.length)}</strong></div>
+        <div class="instagram-ingestion-summary-metric"><span>Source strength</span><strong>${esc(sourceStrength)}</strong></div>
+        <div class="instagram-ingestion-summary-metric"><span>Reels scanned</span><strong>${esc(reels.length)}</strong></div>
+        <div class="instagram-ingestion-summary-metric"><span>Competitor signals</span><strong>${esc(insights.length)}</strong></div>
+        <div class="instagram-ingestion-summary-metric"><span>Trend traces</span><strong>${esc((result.caption_patterns || []).length + (result.audio_patterns || []).length)}</strong></div>
         <div class="instagram-ingestion-summary-metric"><span>Benchmark</span><strong>${esc(result.benchmark_score ?? 0)}</strong></div>
         <div class="instagram-ingestion-summary-metric"><span>Momentum</span><strong>${esc(result.momentum_score ?? 0)}</strong></div>
-        <div class="instagram-ingestion-summary-metric"><span>Snapshots</span><strong>${esc((result.stored_snapshot_ids || []).length)}</strong></div>
       </div>
       <div class="instagram-ingestion-summary-lists">
         <div>
-          <div class="reel-mini-label">Hook library</div>
+          <div class="reel-mini-label">Detected hook language</div>
           ${chipList(result.hook_library)}
         </div>
         <div>
@@ -952,17 +1190,17 @@ function renderInstagramIngestionResult(result) {
       </div>
     </div>
     <div class="card instagram-ingestion-reels-card">
-      <h3>Top normalized reels</h3>
+      <h3>Source scan highlights</h3>
       ${reelCards}
     </div>
     <div class="card instagram-ingestion-trends-card">
-      <h3>Trend snapshots</h3>
+      <h3>Trend traces</h3>
       ${trends.length ? `<div class="instagram-ingestion-trend-list">${trends.slice(0, 3).map((trend) => `
         <div class="instagram-ingestion-trend-card">
           <strong>${esc(trend.trend_name || trend.snapshot_id || "Trend")}</strong>
           <div class="mono">Score ${esc(trend.trend_score ?? 0)} | Viral ${esc(trend.viral_probability ?? 0)} | ${esc(trend.saturation_level || "unknown")}</div>
         </div>
-      `).join("")}</div>` : '<div class="card"><p>No trend snapshots returned.</p></div>'}
+      `).join("")}</div>` : '<div class="card"><p>We captured the sources, but they are still too thin to surface distinct trend snapshots.</p></div>'}
     </div>
   `;
 
@@ -977,6 +1215,14 @@ function resetInstagramIngestionPanel() {
   const controls = instagramIngestionControls;
   const valueControls = [
     controls.reelUrls(),
+    controls.brief(),
+    controls.singleTranscript(),
+    controls.singleCaption(),
+    controls.singleHook(),
+    controls.singleViews(),
+    controls.singleLikes(),
+    controls.singleComments(),
+    controls.singleShares(),
     controls.usernames(),
     controls.competitorReels(),
     controls.trendingReels(),
@@ -995,13 +1241,21 @@ function resetInstagramIngestionPanel() {
   if (controls.includeComments()) controls.includeComments().checked = true;
   if (controls.includeMetrics()) controls.includeMetrics().checked = true;
   if (controls.forceRefresh()) controls.forceRefresh().checked = false;
+  if (controls.singleMode()) controls.singleMode().checked = false;
 
   instagramIngestionJobId = null;
   instagramIngestionJobState = null;
   instagramIngestionResultState = null;
+  instagramAutoPipelineRunning = false;
   clearInstagramIngestionPoll();
   setInstagramIngestionDisabled(false);
-  setInstagramIngestionStatus(null, "Enter reel URLs or usernames, then start ingestion.");
+  const secondarySources = controls.secondarySources();
+  if (secondarySources) secondarySources.classList.add("hidden");
+  const singleFields = controls.singleFields();
+  if (singleFields) singleFields.classList.add("hidden");
+  if (controls.addCompetitors()) controls.addCompetitors().textContent = "Upload Competitor Reels";
+  setInstagramPipelineStage("ingest", "active");
+  setInstagramIngestionStatus(null, "Paste a reel URL and we will run the full intelligence pipeline automatically.");
   renderInstagramIngestionResult(null);
 }
 
@@ -1032,13 +1286,16 @@ async function pollInstagramIngestionJob(jobId) {
       const result = await fetchInstagramIngestionResult(jobId);
       instagramIngestionResultState = result;
       renderInstagramIngestionResult(result);
-      setInstagramIngestionStatus(job, "Ingestion complete. The normalized reel set is ready.", "success");
+      setInstagramPipelineStage("ingest", "done");
+      setInstagramIngestionStatus(job, "Source scan complete. Building viral hook, trend, and direction intelligence...", "success");
       setInstagramIngestionDisabled(false);
       clearInstagramIngestionPoll();
+      await runInstagramAutoPipeline();
       return;
     }
 
     if (job.status === "failed") {
+      setInstagramPipelineStage("ingest", "error");
       setInstagramIngestionStatus(job, job.error || job.message || "Ingestion failed.", "error");
       setInstagramIngestionDisabled(false);
       clearInstagramIngestionPoll();
@@ -1083,7 +1340,8 @@ async function submitInstagramIngestionJob() {
   clearInstagramIngestionPoll();
   setInstagramIngestionDisabled(true);
   renderInstagramIngestionResult(null);
-  setInstagramIngestionStatus({ status: "queued", progress: 0 }, "Submitting ingestion job...");
+  setInstagramPipelineStage("ingest", "active");
+  setInstagramIngestionStatus({ status: "queued", progress: 0 }, "Submitting reel sources for ingestion...");
   showResults();
   activateTab("reels");
 
@@ -1107,13 +1365,16 @@ async function submitInstagramIngestionJob() {
       const result = await fetchInstagramIngestionResult(job.job_id);
       instagramIngestionResultState = result;
       renderInstagramIngestionResult(result);
-      setInstagramIngestionStatus(job, "Ingestion complete. The normalized reel set is ready.", "success");
+      setInstagramPipelineStage("ingest", "done");
+      setInstagramIngestionStatus(job, "Source scan complete. Building viral hook, trend, and direction intelligence...", "success");
       setInstagramIngestionDisabled(false);
+      await runInstagramAutoPipeline();
       return;
     }
 
     pollInstagramIngestionJob(job.job_id);
   } catch (error) {
+    setInstagramPipelineStage("ingest", "error");
     setInstagramIngestionStatus({ job_id: instagramIngestionJobId, status: "failed", progress: 0 }, error.message || "Ingestion failed.", "error");
     setInstagramIngestionDisabled(false);
   }
@@ -1122,6 +1383,14 @@ async function submitInstagramIngestionJob() {
 function buildInstagramReelsPayloadFromState(briefText) {
   const ingestionResult = chatContext?.instagram_ingestion?.result || instagramIngestionResultState || {};
   const normalized = Array.isArray(ingestionResult.reels) ? ingestionResult.reels : [];
+  const singleMode = Boolean(instagramIngestionControls.singleMode()?.checked);
+  const singleTranscript = instagramIngestionControls.singleTranscript()?.value?.trim() || "";
+  const singleCaption = instagramIngestionControls.singleCaption()?.value?.trim() || "";
+  const singleHook = instagramIngestionControls.singleHook()?.value?.trim() || "";
+  const singleViews = parseBoundedNumber(instagramIngestionControls.singleViews()?.value, 0, 0, 1000000000);
+  const singleLikes = parseBoundedNumber(instagramIngestionControls.singleLikes()?.value, 0, 0, 1000000000);
+  const singleComments = parseBoundedNumber(instagramIngestionControls.singleComments()?.value, 0, 0, 1000000000);
+  const singleShares = parseBoundedNumber(instagramIngestionControls.singleShares()?.value, 0, 0, 1000000000);
   const competitorRefs = normalized
     .filter((item) => String(item?.source_type || "").toLowerCase().includes("compet"))
     .slice(0, 20)
@@ -1153,8 +1422,24 @@ function buildInstagramReelsPayloadFromState(briefText) {
       saves: item.engagement?.saves ?? null,
     }));
 
+  const reelUrls = splitMultivalue(instagramIngestionControls.reelUrls()?.value);
+  const primaryReelUrl = reelUrls[0] || null;
+  const manualSingleReference = singleMode ? [{
+    username: null,
+    reel_url: primaryReelUrl,
+    caption: singleCaption || null,
+    transcript: singleTranscript || null,
+    comments: [],
+    audio_name: null,
+    views: singleViews > 0 ? singleViews : null,
+    likes: singleLikes > 0 ? singleLikes : null,
+    shares: singleShares > 0 ? singleShares : null,
+    saves: null,
+  }] : [];
+
   return {
-    brief: briefText,
+    brief: instagramIngestionControls.brief()?.value.trim() || briefText,
+    single_reel_mode: singleMode,
     brand_name: byId("f-brand")?.value?.trim() || "",
     niche: byId("instagram-ingest-niche")?.value?.trim() || "",
     audience: byId("instagram-ingest-audience")?.value?.trim() || "",
@@ -1162,15 +1447,18 @@ function buildInstagramReelsPayloadFromState(briefText) {
     tone: byId("f-tone")?.value || "premium",
     duration_seconds: 30,
     call_to_action: "Comment SCRIPT for the full playbook",
+    transcript: singleTranscript || null,
+    caption: singleCaption || null,
+    hook_angle: singleHook || null,
     instagram_usernames: splitMultivalue(byId("instagram-ingest-usernames")?.value),
-    competitor_reels: competitorRefs,
+    competitor_reels: singleMode ? manualSingleReference.concat(competitorRefs) : competitorRefs,
     trending_reels: trendingRefs,
     normalized_reels: normalized.slice(0, 100),
     extra_context: String(chatContext?.campaign ? JSON.stringify(chatContext.campaign) : "").slice(0, 3000),
   };
 }
 
-async function runInstagramStage(stage) {
+async function runInstagramStage(stage, options = {}) {
   const endpointMap = {
     analyze: "/instagram/analyze-reel",
     trends: "/instagram/detect-trends",
@@ -1181,13 +1469,14 @@ async function runInstagramStage(stage) {
   const endpoint = endpointMap[stage];
   if (!endpoint) return;
 
-  const prompt = chatInput?.value?.trim() || `Create a high-retention Instagram reel for ${byId("f-brand")?.value?.trim() || "my brand"}`;
+  const prompt = instagramIngestionControls.brief()?.value.trim() || chatInput?.value?.trim() || `Create a high-retention Instagram reel for ${byId("f-brand")?.value?.trim() || "my brand"}`;
   const payload = buildInstagramReelsPayloadFromState(prompt);
   if (!payload.brief || payload.brief.length < 3) {
-    appendChat("ai", "Please enter a clearer reel brief (at least 3 characters).");
+    if (!options.silentChat) appendChat("ai", "Please enter a clearer reel brief (at least 3 characters).");
     return;
   }
 
+  setInstagramPipelineStage(stage, "active");
   setStatus(`Running Instagram ${stage}...`);
   if (liveStatus) liveStatus.textContent = `Instagram ${stage} in progress...`;
   try {
@@ -1200,9 +1489,13 @@ async function runInstagramStage(stage) {
     const data = await res.json();
     renderReelsAnalysis(data);
     activateTab("reels");
-    appendChat("ai", `Instagram ${stage} completed. Reels dashboard updated.`);
+    setInstagramPipelineStage(stage, "done");
+    if (!options.silentChat) appendChat("ai", `Instagram ${stage} completed. Reels dashboard updated.`);
+    return data;
   } catch (error) {
-    appendChat("ai", `Instagram ${stage} failed: ${error.message || error}`);
+    setInstagramPipelineStage(stage, "error");
+    if (!options.silentChat) appendChat("ai", `Instagram ${stage} failed: ${error.message || error}`);
+    throw error;
   }
 }
 
@@ -2147,6 +2440,31 @@ function wireEvents() {
   const instagramIngestReset = instagramIngestionControls.reset();
   if (instagramIngestReset) {
     instagramIngestReset.addEventListener("click", resetInstagramIngestionPanel);
+  }
+
+  const instagramAddCompetitors = instagramIngestionControls.addCompetitors();
+  if (instagramAddCompetitors) {
+    instagramAddCompetitors.addEventListener("click", () => {
+      const panel = instagramIngestionControls.secondarySources();
+      if (!panel) return;
+      panel.classList.toggle("hidden");
+      instagramAddCompetitors.textContent = panel.classList.contains("hidden") ? "Upload Competitor Reels" : "Hide Competitor Sources";
+    });
+  }
+
+  const instagramSingleMode = instagramIngestionControls.singleMode();
+  if (instagramSingleMode) {
+    instagramSingleMode.addEventListener("change", () => {
+      const fields = instagramIngestionControls.singleFields();
+      if (!fields) return;
+      fields.classList.toggle("hidden", !instagramSingleMode.checked);
+      if (instagramSingleMode.checked) {
+        setInstagramIngestionStatus(
+          instagramIngestionJobState,
+          "Single reel mode enabled. Add transcript, caption, and opening hook for stronger analysis."
+        );
+      }
+    });
   }
 
   if (instagramIngestionControls.runAnalyze()) instagramIngestionControls.runAnalyze().addEventListener("click", () => runInstagramStage("analyze"));

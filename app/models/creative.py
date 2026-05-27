@@ -537,6 +537,7 @@ class ReelScript(BaseModel):
 
 class InstagramReelsRequest(BaseModel):
     brief: str = Field(..., min_length=3)
+    single_reel_mode: bool = False
     brand_name: str | None = None
     niche: str | None = None
     audience: str | None = None
@@ -594,6 +595,10 @@ class InstagramReelsResponse(BaseModel):
     brand_name: str | None = None
     niche: str | None = None
     audience: str | None = None
+    data_quality_score: int = Field(default=0, ge=0, le=100)
+    confidence_label: str = Field(default="Low")
+    warning_message: str | None = None
+    pipeline_steps: list[str] = Field(default_factory=list)
     viral_probability_score: int = Field(default=0, ge=0, le=100)
     hook_strength_score: int = Field(default=0, ge=0, le=100)
     audience_retention_prediction: int = Field(default=0, ge=0, le=100)
@@ -618,5 +623,7 @@ class InstagramReelsResponse(BaseModel):
     retention_critical_moments: list[str] = Field(default_factory=list)
     dopamine_spikes: list[str] = Field(default_factory=list)
     interruption_pattern_moments: list[str] = Field(default_factory=list)
+    retention_curve: list[int] = Field(default_factory=list)
+    replay_spike_curve: list[int] = Field(default_factory=list)
     audio_trend: str | None = None
     caption_pattern: str | None = None
