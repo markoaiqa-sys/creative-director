@@ -81,6 +81,7 @@ const hooksOutput = byId("hooks-output");
 const anglesOutput = byId("angles-output");
 const copyOutput = byId("copy-output");
 const conceptsOutput = byId("concepts-output");
+const reelsOutput = byId("reels-output");
 const finalsOutput = byId("finals-output");
 const previewsOutput = byId("previews-output");
 const exportsOutput = byId("exports-output");
@@ -145,6 +146,7 @@ const countTargets = {
   angles: [byId("angles-count"), byId("angles-count-large")],
   copy: [byId("copy-count"), byId("copy-count-large")],
   concepts: [byId("concepts-count"), byId("concepts-count-large")],
+  reels: [byId("reels-count"), byId("reels-count-large")],
   exports: [byId("exports-count"), byId("exports-count-large")]
 };
 
@@ -154,6 +156,38 @@ let selectedKnowledgeImages = [];
 let selectedSampleFiles = [];
 let currentSuggestions = [];
 let currentPayload = null;
+let instagramIngestionPollHandle = null;
+let instagramIngestionJobId = null;
+let instagramIngestionJobState = null;
+let instagramIngestionResultState = null;
+
+const instagramIngestionControls = {
+  reelUrls: () => byId("instagram-ingest-reel-urls"),
+  usernames: () => byId("instagram-ingest-usernames"),
+  competitorReels: () => byId("instagram-ingest-competitor-reels"),
+  trendingReels: () => byId("instagram-ingest-trending-reels"),
+  niche: () => byId("instagram-ingest-niche"),
+  audience: () => byId("instagram-ingest-audience"),
+  jobName: () => byId("instagram-ingest-job-name"),
+  maxReels: () => byId("instagram-ingest-max-reels"),
+  cacheTtl: () => byId("instagram-ingest-cache-ttl"),
+  rateLimit: () => byId("instagram-ingest-rate-limit"),
+  includeComments: () => byId("instagram-ingest-include-comments"),
+  includeMetrics: () => byId("instagram-ingest-include-metrics"),
+  forceRefresh: () => byId("instagram-ingest-force-refresh"),
+  submit: () => byId("instagram-ingest-submit"),
+  reset: () => byId("instagram-ingest-reset"),
+  state: () => byId("instagram-ingest-state"),
+  jobId: () => byId("instagram-ingest-job-id"),
+  progress: () => byId("instagram-ingest-progress-fill"),
+  message: () => byId("instagram-ingest-message"),
+  result: () => byId("instagram-ingest-result"),
+  runAnalyze: () => byId("instagram-run-analyze"),
+  runTrends: () => byId("instagram-run-trends"),
+  runScript: () => byId("instagram-run-script"),
+  runDirect: () => byId("instagram-run-direct"),
+  runScore: () => byId("instagram-run-score"),
+};
 
 function defaultSampleHint() {
   return `Optional. Up to ${MAX_SAMPLE_IMAGES} images, max 5MB each, used as visual references for Vertex AI.`;
@@ -480,6 +514,7 @@ function resetOutputs() {
   empty(anglesOutput, "Angles will appear here after generation.");
   empty(copyOutput, "Ad copy will appear here after generation.");
   empty(conceptsOutput, "Generated concepts will appear here after generation.");
+  empty(reelsOutput, "Instagram reels scripts and direction will appear here.");
   empty(exportsOutput, "Export rows will appear here after generation.");
   Object.keys(countTargets).forEach((key) => setCount(key, 0));
 }
@@ -488,12 +523,13 @@ function activateTab(tab) {
   if (supervisorPanel) supervisorPanel.classList.add("hidden");
   if (supervisorNav) supervisorNav.classList.remove("active");
   document.querySelectorAll(".tab").forEach((n) => n.classList.toggle("active", n.dataset.tab === tab));
-  ["finals", "previews", "hooks", "angles", "copy", "concepts", "exports"].forEach((name) => {
+  ["finals", "previews", "hooks", "angles", "copy", "concepts", "reels", "exports"].forEach((name) => {
     byId(`tab-${name}`).classList.toggle("hidden", tab !== name);
   });
   document.querySelectorAll(".specialist").forEach((n) => n.classList.toggle("active", n.dataset.agentTab === tab));
   dashboardNav.classList.remove("active");
   resultsTitle.textContent = "Campaign Output";
+  chatContext.active_specialist = tab;
 }
 
 function toggleCampaign(id) {
@@ -613,6 +649,561 @@ function list(target, items, render) {
     return;
   }
   target.innerHTML = items.map((item, index) => render(item, index)).join("");
+}
+
+function renderReelsAnalysis(analysis) {
+  if (!reelsOutput) return;
+  if (!analysis) {
+    empty(reelsOutput, "No reels analysis available yet.");
+    setCount("reels", 0);
+    return;
+  }
+
+  if (resultsTitle) resultsTitle.textContent = analysis.title || "Instagram Reels Intelligence";
+  if (liveStatus) liveStatus.textContent = analysis.summary || "Structured reel strategy ready.";
+
+  const block = (title, rows) => `
+    <div class="card">
+      <h3>${esc(title)}</h3>
+      <div>${rows}</div>
+    </div>
+  `;
+
+  const listRows = (items) =>
+    (items || []).length
+      ? `<ul>${items.map((x) => `<li>${esc(typeof x === "string" ? x : JSON.stringify(x))}</li>`).join("")}</ul>`
+      : "<p>-</p>";
+
+  const score = analysis.scores || {};
+  const scoreFields = [
+    ["Hook Strength", score.hook_strength],
+    ["Virality", score.virality],
+    ["Retention", score.retention],
+    ["Shareability", score.shareability],
+    ["Emotional Impact", score.emotional_impact],
+    ["Curiosity Gap", score.curiosity_gap],
+    ["Thumbnail Quality", score.thumbnail_quality],
+    ["CTA Effectiveness", score.cta_effectiveness],
+  ];
+
+  const clampScore = (value) => {
+    const number = Number(value);
+    if (Number.isNaN(number)) return 0;
+    return Math.max(0, Math.min(100, number));
+  };
+
+  const scoreGrid = `
+    <div class="reel-score-grid">
+      ${scoreFields.map(([label, value]) => `
+        <div class="reel-score-card">
+          <span>${esc(label)}</span>
+          <strong>${esc(clampScore(value))}</strong>
+        </div>
+      `).join("")}
+    </div>
+  `;
+
+  const retentionGraph = `
+    <div class="reel-meter-list">
+      ${scoreFields.map(([label, value]) => `
+        <div class="reel-meter">
+          <div class="reel-meter-head"><span>${esc(label)}</span><strong>${esc(clampScore(value))}</strong></div>
+          <div class="reel-meter-track"><span class="reel-meter-fill" style="width:${clampScore(value)}%"></span></div>
+        </div>
+      `).join("")}
+    </div>
+  `;
+
+  const analysisRows = (analysis.analysis || []).length
+    ? `<div class="reel-compare-grid">${analysis.analysis.map((x) => `
+        <div class="reel-mini-card">
+          <div class="reel-mini-label">${esc(humanizeToken(x.category || "analysis"))}</div>
+          <h4>${esc(x.insight || "-")}</h4>
+          <p>${esc(x.why_it_works || "-")}</p>
+          <div class="mono">Score: ${esc(x.score ?? "-")} | ${esc(x.recommendation || "-")}</div>
+        </div>
+      `).join("")}</div>`
+    : "<p>-</p>";
+
+  const competitorRows = (analysis.competitor_winning_reels || []).length
+    ? `<div class="reel-compare-grid">${analysis.competitor_winning_reels.map((x) => `
+        <div class="reel-mini-card">
+          <div class="reel-mini-label">${esc(x.competitor || "-")}</div>
+          <h4>${esc(x.hook_format || "-")}</h4>
+          <p>${esc(x.winning_pattern || "-")}</p>
+          <div class="mono">CTA: ${esc(x.cta_strategy || "-")} | Formula: ${esc(x.reusable_formula || "-")}</div>
+        </div>
+      `).join("")}</div>`
+    : "<p>-</p>";
+
+  const trendRows = (analysis.trend_objects || []).length
+    ? `<div class="reel-compare-grid">${analysis.trend_objects.map((x) => `
+        <div class="reel-mini-card">
+          <div class="reel-mini-label">${esc(x.trend_name || "-")}</div>
+          <h4>${esc(x.trend_score ?? "-")} / ${esc(x.viral_probability ?? "-")}</h4>
+          <p>Saturation: ${esc(x.saturation_level || "-")}</p>
+          <div class="mono">Best niches: ${(x.best_niches || []).map((n) => esc(n)).join(", ") || "-"}</div>
+        </div>
+      `).join("")}</div>`
+    : "<p>-</p>";
+
+  const timelineRows = (analysis.second_by_second_timeline || analysis.full_script || analysis.script?.scene_by_scene_direction || []).length
+    ? `<div class="reel-timeline">${(analysis.second_by_second_timeline || analysis.full_script || analysis.script?.scene_by_scene_direction || []).map((x) => `
+        <div class="reel-timeline-item${x.interruption_pattern ? " is-critical" : ""}">
+          <div class="reel-timeline-second">${esc(x.second_range || x.second || "-")}</div>
+          <div class="reel-timeline-body">
+            <strong>${esc(x.scene || "-")}</strong>
+            <p>${esc(x.camera_direction || x.direction || "-")}</p>
+            <div class="mono">${esc(x.retention_note || x.dialogue_or_text || "-")}</div>
+          </div>
+        </div>
+      `).join("")}</div>`
+    : "<p>-</p>";
+
+  const hookRows = (analysis.hook_alternatives || []).length
+    ? `<div class="reel-compare-grid">${analysis.hook_alternatives.map((hook) => `
+        <div class="reel-mini-card">
+          <div class="reel-mini-label">Hook Option</div>
+          <h4>${esc(hook)}</h4>
+        </div>
+      `).join("")}</div>`
+    : "<p>-</p>";
+
+  const script = analysis.script || {};
+  const scriptRows = `
+    <div class="summary-stack">
+      <div><strong>${esc(script.title || analysis.title || "Reel Script")}</strong></div>
+      <div>${esc(script.spoken_script || analysis.instagram_caption || "-")}</div>
+      <div class="mono">CTA: ${esc(script.cta || "-")} | Thumbnail: ${esc(script.thumbnail_text || analysis.thumbnail_text || "-")}</div>
+      <div class="mono">Retention: ${esc(script.retention_strategy_explanation || "-")}</div>
+    </div>
+  `;
+
+  const audienceSignals = `
+    <div class="summary-stack">
+      <div><strong>${esc(analysis.brand_name || "-")}</strong></div>
+      <div>${esc(analysis.summary || "-")}</div>
+      <div class="mono">Audience: ${esc(analysis.audience || "-")} | Niche: ${esc(analysis.niche || "-")}</div>
+      <div class="mono">Probability: ${esc(analysis.viral_probability_score ?? "-")} | Retention: ${esc(analysis.retention_score ?? analysis.audience_retention_prediction ?? "-")}</div>
+    </div>
+  `;
+
+  reelsOutput.innerHTML = [
+    block("Audience Signals", audienceSignals),
+    block("Viral Score Cards", scoreGrid),
+    block("Retention Graph", retentionGraph),
+    block("Hook Comparisons", hookRows),
+    block("Analysis", analysisRows),
+    block("Competitor Insights", competitorRows),
+    block("Trending Formats", trendRows),
+    block("Scene Timeline", timelineRows),
+    block("Script Pack", scriptRows),
+    block("Top Patterns", listRows(analysis.top_performing_patterns || analysis.reusable_winning_formulas)),
+    block("Director Notes", listRows(analysis.director_notes)),
+    block("Recommendations", listRows(analysis.recommendations)),
+    block("Assumptions", listRows(analysis.assumptions)),
+  ].join("");
+  setCount("reels", Math.max(1, (analysis.analysis || []).length, (analysis.trend_objects || []).length, (analysis.competitor_winning_reels || []).length));
+}
+
+function splitMultivalue(value) {
+  return String(value || "")
+    .split(/[\n,]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function parseBoundedNumber(value, fallback, min, max) {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(max, parsed));
+}
+
+function clearInstagramIngestionPoll() {
+  if (instagramIngestionPollHandle) {
+    clearTimeout(instagramIngestionPollHandle);
+    instagramIngestionPollHandle = null;
+  }
+}
+
+function setInstagramIngestionDisabled(disabled) {
+  const controls = [
+    instagramIngestionControls.submit(),
+    instagramIngestionControls.reset(),
+    instagramIngestionControls.reelUrls(),
+    instagramIngestionControls.usernames(),
+    instagramIngestionControls.competitorReels(),
+    instagramIngestionControls.trendingReels(),
+    instagramIngestionControls.niche(),
+    instagramIngestionControls.audience(),
+    instagramIngestionControls.jobName(),
+    instagramIngestionControls.maxReels(),
+    instagramIngestionControls.cacheTtl(),
+    instagramIngestionControls.rateLimit(),
+    instagramIngestionControls.includeComments(),
+    instagramIngestionControls.includeMetrics(),
+    instagramIngestionControls.forceRefresh(),
+  ];
+  controls.forEach((control) => {
+    if (control) control.disabled = disabled;
+  });
+}
+
+function setInstagramIngestionStatus(job, message, kind = "neutral") {
+  const stateEl = instagramIngestionControls.state();
+  const jobIdEl = instagramIngestionControls.jobId();
+  const progressFill = instagramIngestionControls.progress();
+  const messageEl = instagramIngestionControls.message();
+
+  if (stateEl) {
+    const stateLabel = job?.status ? humanizeToken(job.status) : "Idle";
+    stateEl.textContent = stateLabel;
+    stateEl.style.color = kind === "error" ? "#b42318" : kind === "success" ? "#027a48" : "#101828";
+  }
+
+  if (jobIdEl) {
+    jobIdEl.textContent = job?.job_id ? `Job ${job.job_id}` : "No job queued";
+  }
+
+  if (progressFill) {
+    const progress = Number.isFinite(Number(job?.progress)) ? Math.max(0, Math.min(100, Number(job.progress))) : 0;
+    progressFill.style.width = `${progress}%`;
+    progressFill.classList.toggle("is-error", kind === "error");
+  }
+
+  if (messageEl) {
+    messageEl.textContent = message || job?.message || "";
+    messageEl.classList.toggle("is-error", kind === "error");
+  }
+}
+
+function renderInstagramIngestionResult(result) {
+  const container = instagramIngestionControls.result();
+  if (!container) return;
+
+  if (!result) {
+    container.innerHTML = `
+      <div class="card instagram-ingestion-empty">
+        <p>Run an ingestion job to see normalized reels, trend snapshots, and competitor insights here.</p>
+      </div>
+    `;
+    return;
+  }
+
+  const reels = result.reels || [];
+  const trends = result.trend_snapshots || [];
+  const insights = result.competitor_insights || [];
+
+  const chipList = (items, emptyLabel = "-") =>
+    items && items.length
+      ? `<div class="instagram-chip-list">${items.map((item) => `<span class="metric-pill">${esc(item)}</span>`).join("")}</div>`
+      : `<div class="mono">${esc(emptyLabel)}</div>`;
+
+  const reelCards = reels.length
+    ? `<div class="instagram-ingestion-reel-list">${reels.slice(0, 5).map((reel) => `
+        <div class="instagram-ingestion-reel-card">
+          <div class="instagram-ingestion-reel-head">
+            <strong>${esc(reel.username || reel.competitor_name || reel.reel_id || "Reel")}</strong>
+            <span>${esc(reel.hook_type || reel.source_type || "normalized")}</span>
+          </div>
+          <p>${esc(reel.hook_text || reel.caption || "No hook text captured.")}</p>
+          <div class="mono">${esc(reel.reel_url || reel.source || "")}</div>
+          <div class="instagram-ingestion-reel-metrics">
+            <span>Views: ${esc(reel.engagement?.views ?? "-")}</span>
+            <span>Likes: ${esc(reel.engagement?.likes ?? "-")}</span>
+            <span>Comments: ${esc(reel.engagement?.comments ?? "-")}</span>
+            <span>Shares: ${esc(reel.engagement?.shares ?? "-")}</span>
+          </div>
+        </div>
+      `).join("")}</div>`
+    : '<div class="card"><p>No normalized reels returned.</p></div>';
+
+  container.innerHTML = `
+    <div class="card instagram-ingestion-summary-card">
+      <div class="instagram-ingestion-summary-grid">
+        <div class="instagram-ingestion-summary-metric"><span>Reels</span><strong>${esc(reels.length)}</strong></div>
+        <div class="instagram-ingestion-summary-metric"><span>Trends</span><strong>${esc(trends.length)}</strong></div>
+        <div class="instagram-ingestion-summary-metric"><span>Competitors</span><strong>${esc(insights.length)}</strong></div>
+        <div class="instagram-ingestion-summary-metric"><span>Benchmark</span><strong>${esc(result.benchmark_score ?? 0)}</strong></div>
+        <div class="instagram-ingestion-summary-metric"><span>Momentum</span><strong>${esc(result.momentum_score ?? 0)}</strong></div>
+        <div class="instagram-ingestion-summary-metric"><span>Snapshots</span><strong>${esc((result.stored_snapshot_ids || []).length)}</strong></div>
+      </div>
+      <div class="instagram-ingestion-summary-lists">
+        <div>
+          <div class="reel-mini-label">Hook library</div>
+          ${chipList(result.hook_library)}
+        </div>
+        <div>
+          <div class="reel-mini-label">Caption patterns</div>
+          ${chipList(result.caption_patterns)}
+        </div>
+        <div>
+          <div class="reel-mini-label">Hashtag patterns</div>
+          ${chipList(result.hashtag_patterns)}
+        </div>
+        <div>
+          <div class="reel-mini-label">Posting windows</div>
+          ${chipList(result.posting_time_patterns)}
+        </div>
+        <div>
+          <div class="reel-mini-label">Audio patterns</div>
+          ${chipList(result.audio_patterns)}
+        </div>
+      </div>
+    </div>
+    <div class="card instagram-ingestion-reels-card">
+      <h3>Top normalized reels</h3>
+      ${reelCards}
+    </div>
+    <div class="card instagram-ingestion-trends-card">
+      <h3>Trend snapshots</h3>
+      ${trends.length ? `<div class="instagram-ingestion-trend-list">${trends.slice(0, 3).map((trend) => `
+        <div class="instagram-ingestion-trend-card">
+          <strong>${esc(trend.trend_name || trend.snapshot_id || "Trend")}</strong>
+          <div class="mono">Score ${esc(trend.trend_score ?? 0)} | Viral ${esc(trend.viral_probability ?? 0)} | ${esc(trend.saturation_level || "unknown")}</div>
+        </div>
+      `).join("")}</div>` : '<div class="card"><p>No trend snapshots returned.</p></div>'}
+    </div>
+  `;
+
+  instagramIngestionResultState = result;
+  chatContext.instagram_ingestion = {
+    job: instagramIngestionJobState,
+    result,
+  };
+}
+
+function resetInstagramIngestionPanel() {
+  const controls = instagramIngestionControls;
+  const valueControls = [
+    controls.reelUrls(),
+    controls.usernames(),
+    controls.competitorReels(),
+    controls.trendingReels(),
+    controls.niche(),
+    controls.audience(),
+    controls.jobName(),
+  ];
+
+  valueControls.forEach((control) => {
+    if (control) control.value = "";
+  });
+
+  if (controls.maxReels()) controls.maxReels().value = "20";
+  if (controls.cacheTtl()) controls.cacheTtl().value = "1800";
+  if (controls.rateLimit()) controls.rateLimit().value = "30";
+  if (controls.includeComments()) controls.includeComments().checked = true;
+  if (controls.includeMetrics()) controls.includeMetrics().checked = true;
+  if (controls.forceRefresh()) controls.forceRefresh().checked = false;
+
+  instagramIngestionJobId = null;
+  instagramIngestionJobState = null;
+  instagramIngestionResultState = null;
+  clearInstagramIngestionPoll();
+  setInstagramIngestionDisabled(false);
+  setInstagramIngestionStatus(null, "Enter reel URLs or usernames, then start ingestion.");
+  renderInstagramIngestionResult(null);
+}
+
+async function fetchInstagramIngestionJob(jobId) {
+  const response = await fetch(`${API_BASE_URL}/instagram/ingestion-jobs/${encodeURIComponent(jobId)}`);
+  if (!response.ok) {
+    throw new Error(await parseErrorResponse(response));
+  }
+  return response.json();
+}
+
+async function fetchInstagramIngestionResult(jobId) {
+  const response = await fetch(`${API_BASE_URL}/instagram/ingestion-jobs/${encodeURIComponent(jobId)}/result`);
+  if (!response.ok) {
+    throw new Error(await parseErrorResponse(response));
+  }
+  return response.json();
+}
+
+async function pollInstagramIngestionJob(jobId) {
+  clearInstagramIngestionPoll();
+  try {
+    const job = await fetchInstagramIngestionJob(jobId);
+    instagramIngestionJobState = job;
+    setInstagramIngestionStatus(job, job.message || `Job ${job.status || "queued"}.`);
+
+    if (job.status === "completed") {
+      const result = await fetchInstagramIngestionResult(jobId);
+      instagramIngestionResultState = result;
+      renderInstagramIngestionResult(result);
+      setInstagramIngestionStatus(job, "Ingestion complete. The normalized reel set is ready.", "success");
+      setInstagramIngestionDisabled(false);
+      clearInstagramIngestionPoll();
+      return;
+    }
+
+    if (job.status === "failed") {
+      setInstagramIngestionStatus(job, job.error || job.message || "Ingestion failed.", "error");
+      setInstagramIngestionDisabled(false);
+      clearInstagramIngestionPoll();
+      return;
+    }
+
+    instagramIngestionPollHandle = setTimeout(() => pollInstagramIngestionJob(jobId), 2500);
+  } catch (error) {
+    setInstagramIngestionStatus({ job_id: jobId, status: "failed", progress: 0 }, error.message || "Could not load ingestion job.", "error");
+    setInstagramIngestionDisabled(false);
+  }
+}
+
+async function submitInstagramIngestionJob() {
+  const reelUrls = splitMultivalue(instagramIngestionControls.reelUrls()?.value);
+  const usernames = splitMultivalue(instagramIngestionControls.usernames()?.value);
+  const competitorReels = splitMultivalue(instagramIngestionControls.competitorReels()?.value).map((reelUrl) => ({ reel_url: reelUrl }));
+  const trendingReels = splitMultivalue(instagramIngestionControls.trendingReels()?.value).map((reelUrl) => ({ reel_url: reelUrl }));
+
+  if (!reelUrls.length && !usernames.length && !competitorReels.length && !trendingReels.length) {
+    setInstagramIngestionStatus(null, "Add at least one reel URL, username, competitor reel, or trending reel.", "error");
+    return;
+  }
+
+  const payload = {
+    reel_urls: reelUrls,
+    instagram_usernames: usernames,
+    competitor_reels: competitorReels,
+    trending_reels: trendingReels,
+    niche: instagramIngestionControls.niche()?.value.trim() || null,
+    audience: instagramIngestionControls.audience()?.value.trim() || null,
+    max_reels: parseBoundedNumber(instagramIngestionControls.maxReels()?.value, 20, 1, 100),
+    include_comments: Boolean(instagramIngestionControls.includeComments()?.checked),
+    include_metrics: Boolean(instagramIngestionControls.includeMetrics()?.checked),
+    force_refresh: Boolean(instagramIngestionControls.forceRefresh()?.checked),
+    cache_ttl_seconds: parseBoundedNumber(instagramIngestionControls.cacheTtl()?.value, 1800, 0, 86400),
+    rate_limit_per_minute: parseBoundedNumber(instagramIngestionControls.rateLimit()?.value, 30, 1, 120),
+    job_name: instagramIngestionControls.jobName()?.value.trim() || null,
+    async_job: true,
+  };
+
+  clearInstagramIngestionPoll();
+  setInstagramIngestionDisabled(true);
+  renderInstagramIngestionResult(null);
+  setInstagramIngestionStatus({ status: "queued", progress: 0 }, "Submitting ingestion job...");
+  showResults();
+  activateTab("reels");
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/instagram/ingest-reels`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error(await parseErrorResponse(response));
+    }
+
+    const job = await response.json();
+    instagramIngestionJobId = job.job_id || null;
+    instagramIngestionJobState = job;
+    setInstagramIngestionStatus(job, job.message || "Ingestion job queued.");
+
+    if (job.status === "completed") {
+      const result = await fetchInstagramIngestionResult(job.job_id);
+      instagramIngestionResultState = result;
+      renderInstagramIngestionResult(result);
+      setInstagramIngestionStatus(job, "Ingestion complete. The normalized reel set is ready.", "success");
+      setInstagramIngestionDisabled(false);
+      return;
+    }
+
+    pollInstagramIngestionJob(job.job_id);
+  } catch (error) {
+    setInstagramIngestionStatus({ job_id: instagramIngestionJobId, status: "failed", progress: 0 }, error.message || "Ingestion failed.", "error");
+    setInstagramIngestionDisabled(false);
+  }
+}
+
+function buildInstagramReelsPayloadFromState(briefText) {
+  const ingestionResult = chatContext?.instagram_ingestion?.result || instagramIngestionResultState || {};
+  const normalized = Array.isArray(ingestionResult.reels) ? ingestionResult.reels : [];
+  const competitorRefs = normalized
+    .filter((item) => String(item?.source_type || "").toLowerCase().includes("compet"))
+    .slice(0, 20)
+    .map((item) => ({
+      username: item.username || item.competitor_name || null,
+      reel_url: item.reel_url || null,
+      caption: item.caption || null,
+      transcript: item.transcript || null,
+      comments: Array.isArray(item.comments) ? item.comments : [],
+      audio_name: item.audio_name || null,
+      views: item.engagement?.views ?? null,
+      likes: item.engagement?.likes ?? null,
+      shares: item.engagement?.shares ?? null,
+      saves: item.engagement?.saves ?? null,
+    }));
+  const trendingRefs = normalized
+    .filter((item) => String(item?.source_type || "").toLowerCase().includes("trend"))
+    .slice(0, 20)
+    .map((item) => ({
+      username: item.username || item.competitor_name || null,
+      reel_url: item.reel_url || null,
+      caption: item.caption || null,
+      transcript: item.transcript || null,
+      comments: Array.isArray(item.comments) ? item.comments : [],
+      audio_name: item.audio_name || null,
+      views: item.engagement?.views ?? null,
+      likes: item.engagement?.likes ?? null,
+      shares: item.engagement?.shares ?? null,
+      saves: item.engagement?.saves ?? null,
+    }));
+
+  return {
+    brief: briefText,
+    brand_name: byId("f-brand")?.value?.trim() || "",
+    niche: byId("instagram-ingest-niche")?.value?.trim() || "",
+    audience: byId("instagram-ingest-audience")?.value?.trim() || "",
+    goal: byId("f-objective")?.value || "conversions",
+    tone: byId("f-tone")?.value || "premium",
+    duration_seconds: 30,
+    call_to_action: "Comment SCRIPT for the full playbook",
+    instagram_usernames: splitMultivalue(byId("instagram-ingest-usernames")?.value),
+    competitor_reels: competitorRefs,
+    trending_reels: trendingRefs,
+    normalized_reels: normalized.slice(0, 100),
+    extra_context: String(chatContext?.campaign ? JSON.stringify(chatContext.campaign) : "").slice(0, 3000),
+  };
+}
+
+async function runInstagramStage(stage) {
+  const endpointMap = {
+    analyze: "/instagram/analyze-reel",
+    trends: "/instagram/detect-trends",
+    script: "/instagram/generate-script",
+    direct: "/instagram/direct-reel",
+    score: "/instagram/score-reel",
+  };
+  const endpoint = endpointMap[stage];
+  if (!endpoint) return;
+
+  const prompt = chatInput?.value?.trim() || `Create a high-retention Instagram reel for ${byId("f-brand")?.value?.trim() || "my brand"}`;
+  const payload = buildInstagramReelsPayloadFromState(prompt);
+  if (!payload.brief || payload.brief.length < 3) {
+    appendChat("ai", "Please enter a clearer reel brief (at least 3 characters).");
+    return;
+  }
+
+  setStatus(`Running Instagram ${stage}...`);
+  if (liveStatus) liveStatus.textContent = `Instagram ${stage} in progress...`;
+  try {
+    const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(await parseErrorResponse(res));
+    const data = await res.json();
+    renderReelsAnalysis(data);
+    activateTab("reels");
+    appendChat("ai", `Instagram ${stage} completed. Reels dashboard updated.`);
+  } catch (error) {
+    appendChat("ai", `Instagram ${stage} failed: ${error.message || error}`);
+  }
 }
 
 function fileNameFromPath(rawPath, fallback) {
@@ -930,12 +1521,28 @@ async function sendChatMessage() {
   try {
     const mode = chatModeSelect ? chatModeSelect.value : "ask";
     const isCampaignRequest = (mode === "generate");
-    const endpoint = isCampaignRequest ? "/chat-generate" : "/chat-assistant";
+    const activeSpecialist = chatContext.active_specialist || "";
+    const isReelsSpecialist = activeSpecialist === "reels" && !isCampaignRequest;
+    const endpoint = isCampaignRequest ? "/chat-generate" : (isReelsSpecialist ? "/reels-director" : "/chat-assistant");
+    const ingestionResult = chatContext?.instagram_ingestion?.result || instagramIngestionResultState || {};
+    const reelsRequestBody = {
+      message,
+      context: chatContext,
+      session_id: chatSessionId,
+      brand_name: byId("f-brand")?.value?.trim() || chatContext?.campaign?.brand_name || "",
+      niche: byId("instagram-ingest-niche")?.value?.trim() || chatContext?.niche || "",
+      competitors: splitMultivalue(byId("f-competitors")?.value || byId("instagram-ingest-usernames")?.value || ""),
+      trending_reels: (ingestionResult.reels || []).filter((item) => (item.source_type || "").toLowerCase().includes("trend")).slice(0, 20),
+      competitor_reels: (ingestionResult.reels || []).filter((item) => (item.source_type || "").toLowerCase().includes("compet")).slice(0, 20),
+    };
+    const requestBody = isReelsSpecialist
+      ? reelsRequestBody
+      : { message, context: chatContext, session_id: chatSessionId };
 
     const res = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message, context: chatContext, session_id: chatSessionId })
+      body: JSON.stringify(requestBody)
     });
     if (!res.ok) {
       throw new Error(await parseErrorResponse(res));
@@ -947,7 +1554,13 @@ async function sendChatMessage() {
       localStorage.setItem("chat_session_id", chatSessionId);
     }
 
-    if (endpoint === "/chat-generate" && data.action === "generate" && data.extracted) {
+    if (endpoint === "/reels-director") {
+      appendChat("ai", data.reply || "Reels analysis generated.");
+      if (data.analysis) {
+        renderReelsAnalysis(data.analysis);
+        activateTab("reels");
+      }
+    } else if (endpoint === "/chat-generate" && data.action === "generate" && data.extracted) {
       // Step 1: Show the AI reply
       appendChat("ai", data.reply);
 
@@ -1526,6 +2139,26 @@ function wireEvents() {
     tab.addEventListener("click", () => activateTab(tab.dataset.tab));
   });
 
+  const instagramIngestSubmit = instagramIngestionControls.submit();
+  if (instagramIngestSubmit) {
+    instagramIngestSubmit.addEventListener("click", submitInstagramIngestionJob);
+  }
+
+  const instagramIngestReset = instagramIngestionControls.reset();
+  if (instagramIngestReset) {
+    instagramIngestReset.addEventListener("click", resetInstagramIngestionPanel);
+  }
+
+  if (instagramIngestionControls.runAnalyze()) instagramIngestionControls.runAnalyze().addEventListener("click", () => runInstagramStage("analyze"));
+  if (instagramIngestionControls.runTrends()) instagramIngestionControls.runTrends().addEventListener("click", () => runInstagramStage("trends"));
+  if (instagramIngestionControls.runScript()) instagramIngestionControls.runScript().addEventListener("click", () => runInstagramStage("script"));
+  if (instagramIngestionControls.runDirect()) instagramIngestionControls.runDirect().addEventListener("click", () => runInstagramStage("direct"));
+  if (instagramIngestionControls.runScore()) instagramIngestionControls.runScore().addEventListener("click", () => runInstagramStage("score"));
+
+  if (instagramIngestionControls.result()) {
+    resetInstagramIngestionPanel();
+  }
+
   document.querySelectorAll(".specialist").forEach((item) => {
     item.addEventListener("click", () => {
       showResults();
@@ -1805,7 +2438,7 @@ function wireEvents() {
         <div class="chat-row">
           <div class="chat-avatar">AI</div>
           <div class="chat-bubble">
-            Hi! I am the Creative Director Assistant. I can help with hooks, angles, copy, concepts, and campaign strategy.
+            Hi! I am the Creative Director Assistant. I can help with hooks, angles, copy, concepts, reels scripting, and campaign strategy.
             <div class="meta">Assistant</div>
           </div>
           <div class="chat-time">Just now</div>

@@ -28,11 +28,22 @@ from app.providers.groq_llm import GroqLLMProvider
 from app.providers.huggingface import HuggingFaceClient
 from app.providers.nanobanana import NanoBananaClient
 from app.providers.vertex_ai import VertexAIClient
+from app.services.instagram_analyzer import InstagramAnalyzer
+from app.services.instagram_engine import InstagramDirectorEngine
+from app.services.instagram_ingestion import InstagramIngestionService
+from app.services.reels_director import ReelsDirector
+from app.services.retention_scorer import RetentionScorer
 from app.services.composition import AdCompositionService, build_brand_assets
 from app.services.database import CampaignDatabase
 from app.services.download_artifacts import CreativeDownloadArtifactExporter
 from app.services.exporter import MetaAdsCsvExporter
+from app.services.ingestors.competitor_tracker import CompetitorTracker
+from app.services.ingestors.instagram_ingestor import InstagramIngestor
+from app.services.ingestors.trend_collector import TrendCollector
+from app.services.viral_pattern_engine import ViralPatternEngine
 from app.services.generators import AdCopyGenerator, HookGenerator, MessagingAngleGenerator, VisualConceptGenerator
+from app.services.script_writer import ScriptWriter
+from app.services.trend_detector import TrendDetector
 from app.services.image_fallback import LocalImageFallbackService
 from app.services.preview import AdPreviewGenerator
 from app.services.scoring import CreativeScoringService
@@ -493,6 +504,26 @@ class ServiceContainer:
         preview_generator = AdPreviewGenerator()
         exporter = MetaAdsCsvExporter()
         image_fallback_service = LocalImageFallbackService()
+        instagram_ingestor = InstagramIngestor(timeout_seconds=settings.image_provider_timeout_seconds)
+        trend_collector = TrendCollector()
+        competitor_tracker = CompetitorTracker()
+        pattern_engine = ViralPatternEngine()
+        trend_detector = TrendDetector(storage=storage)
+        retention_scorer = RetentionScorer()
+        instagram_analyzer = InstagramAnalyzer(
+            llm=llm,
+            pattern_engine=pattern_engine,
+            trend_detector=trend_detector,
+            scorer=retention_scorer,
+            storage=storage,
+        )
+        script_writer = ScriptWriter(
+            llm=llm,
+            analyzer=instagram_analyzer,
+            scorer=retention_scorer,
+            trend_detector=trend_detector,
+        )
+        reels_director = ReelsDirector(llm=llm, script_writer=script_writer, analyzer=instagram_analyzer)
 
         self.engine = CreativeDirectorEngine(
             hook_generator=HookGenerator(llm),
@@ -510,8 +541,22 @@ class ServiceContainer:
             exporter=exporter,
             image_fallback_service=image_fallback_service,
         )
+        self.instagram_engine = InstagramDirectorEngine(
+            trend_detector=trend_detector,
+            analyzer=instagram_analyzer,
+            script_writer=script_writer,
+            director=reels_director,
+            scorer=retention_scorer,
+            pattern_engine=pattern_engine,
+        )
+        self.instagram_ingestion = InstagramIngestionService(
+            ingestor=instagram_ingestor,
+            trend_collector=trend_collector,
+            competitor_tracker=competitor_tracker,
+            storage=storage,
+        )
         self.engine._image_provider_timeout_seconds = settings.image_provider_timeout_seconds
-        self._closables = [llm, nanobanana, vertex_client, hf_client, database]
+        self._closables = [llm, nanobanana, vertex_client, hf_client, database, instagram_ingestor]
 
     async def aclose(self) -> None:
         for resource in self._closables:

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="backend-url" content="">
   <title>Creative Director Engine</title>
-  <link rel="stylesheet" href="/styles.css?v=20260526_1">
+  <link rel="stylesheet" href="/styles.css?v=20260527_1">
   <script src="/env-config.js?v=20260522_4"></script>
 </head>
 <body>
@@ -73,6 +73,10 @@
       <button class="nav-item specialist" data-agent-tab="concepts" type="button">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="nav-icon-svg"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
         <span>Visual Planner</span>
+      </button>
+      <button class="nav-item specialist" data-agent-tab="reels" type="button">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="nav-icon-svg"><rect x="2" y="6" width="20" height="12" rx="2"></rect><line x1="7" y1="6" x2="7" y2="18"></line><line x1="12" y1="6" x2="12" y2="18"></line><line x1="17" y1="6" x2="17" y2="18"></line></svg>
+        <span>Reels Script Director</span>
       </button>
       
       <p class="nav-label">ANALYSIS</p>
@@ -175,13 +179,104 @@
         </section>
         <section class="loading-card hidden" id="loading-panel"><h2><div class="spinner-ring"></div> Generating campaign...</h2><p>This may take 2-3 minutes. Your final creatives, previews, and export package are being assembled.</p><div class="loading-dots" aria-hidden="true"><span></span><span></span><span></span></div></section>
         <section class="results-card hidden" id="results-panel">
-          <header class="results-head"><div><h2 id="results-title">Campaign Output</h2><p id="live-status">Ready.</p></div><div class="tabs"><button class="tab active" data-tab="finals" type="button">Final Ads <span id="finals-count">0</span></button><button class="tab" data-tab="previews" type="button">Previews <span id="previews-count">0</span></button><button class="tab" data-tab="hooks" type="button">Hooks <span id="hooks-count">0</span></button><button class="tab" data-tab="angles" type="button">Angles <span id="angles-count">0</span></button><button class="tab" data-tab="copy" type="button">Copy <span id="copy-count">0</span></button><button class="tab" data-tab="concepts" type="button">Concepts <span id="concepts-count">0</span></button><button class="tab" data-tab="exports" type="button">Exports <span id="exports-count">0</span></button></div></header>
+          <header class="results-head"><div><h2 id="results-title">Campaign Output</h2><p id="live-status">Ready.</p></div><div class="tabs"><button class="tab active" data-tab="finals" type="button">Final Ads <span id="finals-count">0</span></button><button class="tab" data-tab="previews" type="button">Previews <span id="previews-count">0</span></button><button class="tab" data-tab="hooks" type="button">Hooks <span id="hooks-count">0</span></button><button class="tab" data-tab="angles" type="button">Angles <span id="angles-count">0</span></button><button class="tab" data-tab="copy" type="button">Copy <span id="copy-count">0</span></button><button class="tab" data-tab="concepts" type="button">Concepts <span id="concepts-count">0</span></button><button class="tab" data-tab="reels" type="button">Reels <span id="reels-count">0</span></button><button class="tab" data-tab="exports" type="button">Exports <span id="exports-count">0</span></button></div></header>
           <section id="tab-finals" class="output-tab"><div class="section-title">Rendered Ads <span id="finals-count-large">0</span></div><div id="finals-output" class="stack"></div></section>
           <section id="tab-previews" class="output-tab hidden"><div class="section-title">Feed Previews <span id="previews-count-large">0</span></div><div id="previews-output" class="stack"></div></section>
           <section id="tab-hooks" class="output-tab"><div class="section-title">Generated Hooks <span id="hooks-count-large">0</span></div><div id="hooks-output" class="stack"></div></section>
           <section id="tab-angles" class="output-tab hidden"><div class="section-title">Generated Angles <span id="angles-count-large">0</span></div><div id="angles-output" class="stack"></div></section>
           <section id="tab-copy" class="output-tab hidden"><div class="section-title">Generated Ad Copy <span id="copy-count-large">0</span></div><div id="copy-output" class="stack"></div></section>
           <section id="tab-concepts" class="output-tab hidden"><div class="section-title">Generated Concepts <span id="concepts-count-large">0</span></div><div id="concepts-output" class="stack"></div></section>
+          <section id="tab-reels" class="output-tab hidden">
+            <div class="section-title">Instagram Reels Scripts <span id="reels-count-large">0</span></div>
+            <div id="instagram-ingestion-panel" class="instagram-ingestion-panel">
+              <div class="instagram-ingestion-head">
+                <div>
+                  <p class="panel-kicker">Live ingestion</p>
+                  <h3>Pull reel intelligence into the director</h3>
+                  <p>Queue a background job, then poll until the normalized reel snapshot is ready.</p>
+                </div>
+                <div class="instagram-ingestion-badges">
+                  <span class="metric-pill">Async job</span>
+                  <span class="metric-pill">Normalized reels</span>
+                </div>
+              </div>
+
+              <div class="instagram-ingestion-grid">
+                <label class="field span-2">
+                  <span>Reel URLs</span>
+                  <textarea id="instagram-ingest-reel-urls" placeholder="One reel URL per line or comma-separated"></textarea>
+                </label>
+                <label class="field span-2">
+                  <span>Instagram usernames</span>
+                  <textarea id="instagram-ingest-usernames" placeholder="One username per line or comma-separated"></textarea>
+                </label>
+                <label class="field span-2">
+                  <span>Competitor reels</span>
+                  <textarea id="instagram-ingest-competitor-reels" placeholder="Optional. One reel URL per line for competitor benchmarks."></textarea>
+                </label>
+                <label class="field span-2">
+                  <span>Trending reels</span>
+                  <textarea id="instagram-ingest-trending-reels" placeholder="Optional. One reel URL per line for trend detection."></textarea>
+                </label>
+                <label class="field">
+                  <span>Niche</span>
+                  <input id="instagram-ingest-niche" type="text" placeholder="fitness, beauty, SaaS...">
+                </label>
+                <label class="field">
+                  <span>Audience</span>
+                  <input id="instagram-ingest-audience" type="text" placeholder="founders, creators, buyers...">
+                </label>
+                <label class="field">
+                  <span>Job name</span>
+                  <input id="instagram-ingest-job-name" type="text" placeholder="Weekly competitor ingest">
+                </label>
+                <label class="field">
+                  <span>Max reels</span>
+                  <input id="instagram-ingest-max-reels" type="number" min="1" max="100" value="20">
+                </label>
+                <label class="field">
+                  <span>Cache TTL (sec)</span>
+                  <input id="instagram-ingest-cache-ttl" type="number" min="0" max="86400" value="1800">
+                </label>
+                <label class="field">
+                  <span>Rate limit / minute</span>
+                  <input id="instagram-ingest-rate-limit" type="number" min="1" max="120" value="30">
+                </label>
+              </div>
+
+              <div class="instagram-ingestion-options">
+                <label class="toggle-pill"><input id="instagram-ingest-include-comments" type="checkbox" checked><span>Include comments</span></label>
+                <label class="toggle-pill"><input id="instagram-ingest-include-metrics" type="checkbox" checked><span>Include metrics</span></label>
+                <label class="toggle-pill"><input id="instagram-ingest-force-refresh" type="checkbox"><span>Force refresh</span></label>
+              </div>
+
+              <div class="instagram-ingestion-actions">
+                <button id="instagram-ingest-submit" class="primary-btn" type="button">Start ingestion</button>
+                <button id="instagram-ingest-reset" class="top-pill" type="button">Reset fields</button>
+              </div>
+              <div class="instagram-ingestion-actions" style="margin-top:8px;flex-wrap:wrap;">
+                <button id="instagram-run-analyze" class="top-pill" type="button">Analyze</button>
+                <button id="instagram-run-trends" class="top-pill" type="button">Trends</button>
+                <button id="instagram-run-script" class="top-pill" type="button">Script</button>
+                <button id="instagram-run-direct" class="top-pill" type="button">Direct</button>
+                <button id="instagram-run-score" class="top-pill" type="button">Score</button>
+              </div>
+
+              <div class="instagram-ingestion-status">
+                <div class="instagram-ingestion-status-row">
+                  <strong id="instagram-ingest-state">Idle</strong>
+                  <span id="instagram-ingest-job-id">No job queued</span>
+                </div>
+                <div class="instagram-ingest-progress-track">
+                  <span id="instagram-ingest-progress-fill" class="instagram-ingest-progress-fill" style="width:0%"></span>
+                </div>
+                <div id="instagram-ingest-message" class="mono">Enter reel URLs or usernames, then start ingestion.</div>
+              </div>
+
+              <div id="instagram-ingest-result" class="instagram-ingestion-result"></div>
+            </div>
+            <div id="reels-output" class="stack"></div>
+          </section>
           <section id="tab-exports" class="output-tab hidden"><div class="section-title">Export Package <span id="exports-count-large">0</span></div><div id="exports-output" class="stack"></div></section>
         </section>
         <section class="history-card hidden" id="history-panel">
@@ -236,7 +331,7 @@
           <div class="chat-row">
             <div class="chat-avatar">AI</div>
             <div class="chat-bubble">
-              Hi! I am the Creative Director Assistant. I can help with hooks, angles, copy, concepts, and campaign strategy.
+              Hi! I am the Creative Director Assistant. I can help with hooks, angles, copy, concepts, reels scripting, and campaign strategy.
               <br><br>💡 <b>Tip:</b> To generate an entire campaign from chat, start your prompt with: <code>Create ad creatives for [Brand]</code>
               <div class="meta">Assistant</div>
             </div>
@@ -305,6 +400,6 @@
     </div>
   </div>
 
-  <script defer src="/app.js?v=20260526_9"></script>
+  <script defer src="/app.js?v=20260527_1"></script>
 </body>
 </html>
