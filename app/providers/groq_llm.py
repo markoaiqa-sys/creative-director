@@ -10,6 +10,28 @@ from app.core.config import Settings
 StructuredModel = TypeVar("StructuredModel", bound=BaseModel)
 
 
+def _dereference_schema(schema: dict) -> dict:
+    """Recursively inline $defs references in JSON schema to make it readable for smaller LLMs."""
+    def resolve(node, defs):
+        if isinstance(node, dict):
+            if "$ref" in node:
+                ref_path = node["$ref"]
+                if ref_path.startswith("#/$defs/"):
+                    def_name = ref_path.split("/")[-1]
+                    ref_node = defs.get(def_name, {})
+                    return resolve(ref_node, defs)
+            return {k: resolve(v, defs) for k, v in node.items()}
+        elif isinstance(node, list):
+            return [resolve(item, defs) for item in node]
+        return node
+
+    defs = schema.get("$defs", {})
+    resolved = resolve(schema, defs)
+    if "$defs" in resolved:
+        del resolved["$defs"]
+    return resolved
+
+
 class GroqLLMProvider:
     def __init__(self, settings: Settings) -> None:
         self._api_key = settings.groq_api_key
@@ -37,8 +59,24 @@ class GroqLLMProvider:
         user_prompt: str,
         response_model: type[StructuredModel],
     ) -> StructuredModel:
+        # Generate the JSON schema from the response_model Pydantic model to guide the LLM precisely
+        try:
+            schema_dict = response_model.model_json_schema()
+            derefed_schema = _dereference_schema(schema_dict)
+            schema_json = json.dumps(derefed_schema, indent=2)
+            schema_instructions = (
+                f"{instructions}\n\n"
+                f"You MUST return a JSON object that strictly adheres to the following JSON Schema:\n"
+                f"{schema_json}\n\n"
+                f"Ensure every list field is a JSON array (not a nested object), "
+                f"and all fields match their schema names and types exactly."
+            )
+        except Exception as err:
+            print(f"[WARN] Failed to generate JSON schema: {err}")
+            schema_instructions = instructions
+
         payload = await self.json_completion(
-            instructions=instructions,
+            instructions=schema_instructions,
             user_prompt=user_prompt,
         )
         return response_model.model_validate(payload)

@@ -45,7 +45,7 @@ class ReelsDirector:
     @staticmethod
     def _merge(base: InstagramReelsResponse, overlay: InstagramReelsResponse, timeline: list[ReelSceneBeat]) -> InstagramReelsResponse:
         data = base.model_dump(mode="json")
-        overlay_data = overlay.model_dump(mode="json")
+        overlay_data = overlay.model_dump(exclude_unset=True, mode="json")
         for key, value in overlay_data.items():
             if value not in (None, "", [], {}):
                 data[key] = value

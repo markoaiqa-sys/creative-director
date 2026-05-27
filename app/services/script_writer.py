@@ -142,7 +142,7 @@ class ScriptWriter:
     @staticmethod
     def _merge(analysis: InstagramReelsResponse, structured: InstagramReelsResponse, script: ReelScript) -> InstagramReelsResponse:
         data = analysis.model_dump(mode="json")
-        overlay = structured.model_dump(mode="json")
+        overlay = structured.model_dump(exclude_unset=True, mode="json")
         for key, value in overlay.items():
             if value not in (None, "", [], {}):
                 data[key] = value
@@ -159,7 +159,7 @@ class ScriptWriter:
         if not overlay:
             return base
         data = base.model_dump(mode="json")
-        overlay_data = overlay.model_dump(mode="json")
+        overlay_data = overlay.model_dump(exclude_unset=True, mode="json")
         for key, value in overlay_data.items():
             if value not in (None, "", [], {}):
                 data[key] = value

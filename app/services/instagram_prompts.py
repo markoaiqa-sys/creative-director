@@ -116,6 +116,19 @@ def _serialize_request(request: InstagramReelsRequest) -> str:
     return json.dumps(request.model_dump(mode="json"), indent=2, ensure_ascii=True)
 
 
+def _serialize_analysis(analysis: InstagramReelsResponse) -> str:
+    # Restrict keys to essential fields to minimize token consumption and avoid 429 rate limits
+    keys_to_keep = {
+        "summary", "brand_name", "niche", "audience", "viral_probability_score",
+        "hook_strength_score", "audience_retention_prediction", "retention_score",
+        "hook_alternatives", "top_performing_patterns", "content_gaps",
+        "reusable_winning_formulas", "recommendations", "assumptions", "audio_trend", "caption_pattern"
+    }
+    data = analysis.model_dump(mode="json")
+    clean_data = {k: v for k, v in data.items() if k in keys_to_keep and v not in (None, "", [], {})}
+    return json.dumps(clean_data, indent=2, ensure_ascii=True)
+
+
 def analysis_prompt(request: InstagramReelsRequest) -> str:
     return (
         "Analyze the provided Instagram reel brief and reference material like an elite Reel Intelligence engine. "
@@ -160,7 +173,7 @@ def script_prompt(request: InstagramReelsRequest, analysis: InstagramReelsRespon
         "This is not plain copywriting. Build a cinematic retention-first reel with emotional transitions, subtitle logic, edit rhythm, "
         "curiosity loops, payoff timing, replay triggers, and a strong CTA.\n\n"
         f"REQUEST:\n{_serialize_request(request)}\n\n"
-        f"ANALYSIS_CONTEXT:\n{analysis.model_dump_json(indent=2)}\n\n"
+        f"ANALYSIS_CONTEXT:\n{_serialize_analysis(analysis)}\n\n"
         "Return a complete shoot-ready script with:\n"
         "- title\n"
         "- hook\n"
@@ -184,7 +197,7 @@ def director_prompt(request: InstagramReelsRequest, analysis: InstagramReelsResp
         "retention purpose, editing notes, transition style, and sound/music cue. "
         "Explicitly surface retention-critical moments, dopamine spikes, interruption beats, and visual pacing psychology.\n\n"
         f"REQUEST:\n{_serialize_request(request)}\n\n"
-        f"ANALYSIS_CONTEXT:\n{analysis.model_dump_json(indent=2)}\n\n"
+        f"ANALYSIS_CONTEXT:\n{_serialize_analysis(analysis)}\n\n"
         f"SCRIPT:\n{script.model_dump_json(indent=2)}\n\n"
         "Return only structured JSON for production execution."
     )
@@ -195,7 +208,7 @@ def scoring_prompt(request: InstagramReelsRequest, analysis: InstagramReelsRespo
         "Score this Instagram reel concept for hook strength, curiosity, emotional trigger, retention potential, replayability, "
         "shareability, save potential, comment bait, viral probability, visual intensity, editing quality, and audience targeting.\n\n"
         f"REQUEST:\n{_serialize_request(request)}\n\n"
-        f"ANALYSIS_CONTEXT:\n{analysis.model_dump_json(indent=2)}\n\n"
+        f"ANALYSIS_CONTEXT:\n{_serialize_analysis(analysis)}\n\n"
         f"SCRIPT:\n{script.model_dump_json(indent=2)}\n\n"
         "Return a scored breakdown and rationale. Scores must feel evidence-based, not random, and should explain why each category is high or low."
     )
