@@ -585,6 +585,346 @@ button {
   color: #4f4f4f;
 }
 
+.reel-score-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.reel-score-card {
+  border: 1px solid #e3e6eb;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
+}
+
+.reel-score-card span,
+.reel-mini-label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #667085;
+}
+
+.reel-score-card strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 1.35rem;
+  color: #101828;
+}
+
+.reel-meter-list {
+  display: grid;
+  gap: 10px;
+}
+
+.reel-meter-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+  font-size: 0.84rem;
+  color: #344054;
+}
+
+.reel-meter-track {
+  height: 10px;
+  border-radius: 999px;
+  background: #eef2f7;
+  overflow: hidden;
+}
+
+.reel-meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #111111 0%, #4a4a4a 100%);
+}
+
+.reel-compare-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.reel-mini-card {
+  border: 1px solid #e3e6eb;
+  border-radius: 12px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.reel-mini-card h4 {
+  margin: 6px 0 6px;
+  font-size: 0.98rem;
+  color: #101828;
+}
+
+.reel-mini-card p {
+  margin: 0 0 8px;
+  color: #344054;
+}
+
+.reel-timeline {
+  display: grid;
+  gap: 10px;
+}
+
+.reel-timeline-item {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #e3e6eb;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfbfd 100%);
+}
+
+.reel-timeline-item.is-critical {
+  border-color: #111111;
+}
+
+.reel-timeline-second {
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: #111111;
+}
+
+.reel-timeline-body strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #101828;
+}
+
+.reel-timeline-body p {
+  margin: 0 0 6px;
+  color: #344054;
+}
+
+.instagram-ingestion-panel {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 16px;
+  padding: 16px;
+  border: 1px solid #e3e6eb;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #ffffff 0%, #f7f9fc 100%);
+}
+
+.instagram-ingestion-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.panel-kicker {
+  margin: 0 0 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #667085;
+}
+
+.instagram-ingestion-head h3 {
+  margin: 0;
+  font-size: 1.15rem;
+  color: #101828;
+}
+
+.instagram-ingestion-head p {
+  margin: 6px 0 0;
+  color: #475467;
+}
+
+.instagram-ingestion-badges,
+.instagram-ingestion-options,
+.instagram-ingestion-actions,
+.instagram-ingestion-status-row,
+.instagram-ingestion-summary-grid,
+.instagram-ingestion-summary-lists,
+.instagram-ingestion-reel-metrics {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.instagram-ingestion-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.instagram-ingestion-grid .field textarea {
+  min-height: 86px;
+}
+
+.toggle-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid #d0d5dd;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #344054;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.toggle-pill input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+}
+
+.instagram-ingestion-actions {
+  align-items: center;
+}
+
+.instagram-ingestion-status {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid #e3e6eb;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.instagram-ingestion-status-row {
+  justify-content: space-between;
+  align-items: center;
+  color: #101828;
+}
+
+.instagram-ingestion-status-row span {
+  color: #667085;
+  font-size: 0.88rem;
+}
+
+.instagram-ingest-progress-track {
+  height: 10px;
+  border-radius: 999px;
+  background: #eef2f7;
+  overflow: hidden;
+}
+
+.instagram-ingest-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #111111 0%, #4a4a4a 100%);
+  transition: width 0.2s ease;
+}
+
+.instagram-ingest-progress-fill.is-error {
+  background: linear-gradient(90deg, #b42318 0%, #f04438 100%);
+}
+
+.instagram-ingest-message.is-error {
+  color: #b42318;
+}
+
+.instagram-ingestion-result {
+  display: grid;
+  gap: 12px;
+}
+
+.instagram-ingestion-empty {
+  margin: 0;
+}
+
+.instagram-ingestion-summary-card,
+.instagram-ingestion-reels-card,
+.instagram-ingestion-trends-card {
+  display: grid;
+  gap: 12px;
+}
+
+.instagram-ingestion-summary-metric {
+  flex: 1 1 120px;
+  border: 1px solid #e3e6eb;
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: #ffffff;
+}
+
+.instagram-ingestion-summary-metric span {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #667085;
+}
+
+.instagram-ingestion-summary-metric strong {
+  display: block;
+  margin-top: 5px;
+  font-size: 1.3rem;
+  color: #101828;
+}
+
+.instagram-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.instagram-ingestion-reel-list,
+.instagram-ingestion-trend-list {
+  display: grid;
+  gap: 10px;
+}
+
+.instagram-ingestion-reel-card,
+.instagram-ingestion-trend-card {
+  border: 1px solid #e3e6eb;
+  border-radius: 14px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.instagram-ingestion-reel-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.instagram-ingestion-reel-head strong,
+.instagram-ingestion-trend-card strong {
+  color: #101828;
+}
+
+.instagram-ingestion-reel-head span {
+  color: #667085;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.instagram-ingestion-reel-card p {
+  margin: 8px 0 8px;
+  color: #344054;
+}
+
+.instagram-ingestion-reel-metrics span {
+  border: 1px solid #d0d5dd;
+  border-radius: 999px;
+  padding: 5px 9px;
+  color: #344054;
+  background: #f9fafb;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
 .concept-img {
   width: 100%;
   border-radius: 8px;

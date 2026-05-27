@@ -1,4 +1,5 @@
 import asyncio
+import asyncio
 import logging
 
 from fastapi import APIRouter
@@ -23,6 +24,33 @@ class ChatResponse(BaseModel):
 
 from fastapi import APIRouter, Header, Request, Depends
 
+SPECIALIST_SYSTEM_PROMPTS = {
+    "reels": (
+        "You are Marko's Instagram Reels Script Writer and Director specialist. "
+        "Focus on viral reel mechanics: visual hooks, opening line hooks, trend adaptation, "
+        "competitor winning reel patterns, caption strategy, and a complete shoot-ready script. "
+        "When asked for reels output, include: viral analysis, hook options, full script with timing, "
+        "shot direction/edit notes, and caption plus hashtags."
+    )
+}
+
+class ReelsDirectorRequest(BaseModel):
+    message: str
+    context: dict | None = None
+    session_id: str | None = None
+    brand_name: str | None = None
+    niche: str | None = None
+    competitors: list[str] | None = None
+    trending_reels: list[dict] | None = None
+    competitor_reels: list[dict] | None = None
+
+
+class ReelsDirectorResponse(BaseModel):
+    reply: str
+    analysis: dict | None = None
+    context: dict | None = None
+    session_id: str | None = None
+
 @router.post("/chat-assistant", response_model=ChatResponse)
 async def chat_assistant(
     request: ChatRequest,
@@ -36,6 +64,7 @@ async def chat_assistant(
     session_id = request.session_id or str(uuid.uuid4())
 
     context = request.context or {}
+    active_specialist = context.get("active_specialist")
     history = context.get("history", [])
     campaign = context.get("campaign", {})
 
@@ -57,6 +86,9 @@ async def chat_assistant(
         if parts:
             campaign_summary = "\n\nCURRENT CAMPAIGN OUTPUT:\n" + "\n\n".join(parts)
 
+    specialist_guidance = SPECIALIST_SYSTEM_PROMPTS.get(active_specialist, "")
+    specialist_text = f"\n\nSpecialist mode:\n{specialist_guidance}" if specialist_guidance else ""
+
     system = f"""You are Marko, a sharp AI assistant built into Marko AI — an agentic platform for generating ad hooks, angles, copy, and visual concepts.
 
 Rules:
@@ -65,7 +97,7 @@ Rules:
 - If asked about the generated content, reference it specifically.
 - If asked something off-topic, briefly answer and steer back to marketing/ads.
 - Never say "Great question", "Of course", "Certainly", or any preamble.
-- Tone: confident, sharp, like a senior growth marketer.{campaign_summary}"""
+- Tone: confident, sharp, like a senior growth marketer.{campaign_summary}{specialist_text}"""
 
     messages = [{"role": "system", "content": system}]
     for entry in history[-10:]:
@@ -192,6 +224,70 @@ Rules:
             friendly = f"Sorry, I couldn't reach the AI backend. ({errors})"
         log.error(f"[CHAT] All providers failed: {' | '.join(error_msgs)}")
         return ChatResponse(reply=friendly, context=request.context, session_id=session_id)
+
+
+@router.post("/reels-director", response_model=ReelsDirectorResponse)
+async def reels_director(
+    request: ReelsDirectorRequest,
+    http_request: Request,
+    x_client_email: str | None = Header(None),
+    x_is_guest: str | None = Header(None),
+):
+    settings = get_settings()
+    from app.services.database import ChatDatabase
+    import uuid
+
+    chat_db = ChatDatabase(settings)
+    session_id = request.session_id or str(uuid.uuid4())
+    context = request.context or {}
+    history = context.get("history", [])
+    container = http_request.app.state.container
+    instagram_engine = container.instagram_engine
+
+    from app.models import InstagramDirectReelRequest, NormalizedReelData
+
+    ingestion = context.get("instagram_ingestion") or {}
+    ingestion_result = ingestion.get("result") or {}
+    normalized_reels_raw = ingestion_result.get("reels") or []
+    normalized_reels: list[NormalizedReelData] = []
+    for item in normalized_reels_raw[:100]:
+        try:
+            normalized_reels.append(NormalizedReelData.model_validate(item))
+        except Exception:
+            continue
+
+    reels_payload = InstagramDirectReelRequest.model_validate(
+        {
+            "brief": request.message,
+            "brand_name": request.brand_name or context.get("brand_name"),
+            "niche": request.niche or context.get("niche"),
+            "audience": context.get("audience"),
+            "extra_context": str(context.get("campaign", {}))[:3000],
+            "competitor_reels": request.competitor_reels or [],
+            "trending_reels": request.trending_reels or [],
+            "instagram_usernames": request.competitors or [],
+            "call_to_action": context.get("cta"),
+            "normalized_reels": [item.model_dump(mode="json") for item in normalized_reels],
+            "duration_seconds": 30,
+        }
+    )
+
+    try:
+        result = await instagram_engine.direct_reel(reels_payload)
+    except Exception as exc:
+        fallback_reply = f"I could not complete structured reels analysis right now. ({exc})"
+        return ReelsDirectorResponse(reply=fallback_reply, analysis=None, context=context, session_id=session_id)
+
+    reply = "Instagram Reels analysis is ready: viral patterns, competitor wins, script direction, and retention scoring."
+    is_guest_bool = x_is_guest == "true"
+    chat_db.save_message(session_id, "user", request.message, client_email=x_client_email, is_guest=is_guest_bool)
+    chat_db.save_message(session_id, "assistant", reply, client_email=x_client_email, is_guest=is_guest_bool)
+    new_history = history + [
+        {"role": "user", "content": request.message},
+        {"role": "assistant", "content": reply},
+    ]
+    new_context = {**context, "history": new_history, "last_reels_analysis": result.model_dump(mode="json"), "active_specialist": "reels"}
+    return ReelsDirectorResponse(reply=reply, analysis=result.model_dump(mode="json"), context=new_context, session_id=session_id)
 
 @router.get("/chat-history/{session_id}")
 async def get_chat_history(

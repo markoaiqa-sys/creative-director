@@ -23,6 +23,8 @@ class CampaignStorage:
         self._output_root.mkdir(parents=True, exist_ok=True)
         self._kb_root = self._output_root / "knowledge_base"
         self._kb_root.mkdir(parents=True, exist_ok=True)
+        self._instagram_root = self._kb_root / "instagram"
+        self._instagram_root.mkdir(parents=True, exist_ok=True)
         self._s3_bucket_name = settings.s3_bucket_name
         self._s3_client = (
             boto3.client("s3", region_name=settings.s3_region)
@@ -425,3 +427,47 @@ class CampaignStorage:
                     self.save_file_to_db(rel_path, data, mime)
                 except Exception as e:
                     logger.error(f"Failed to sync file {p} to DB: {e}")
+
+    def load_instagram_trend_memory(self) -> list[dict]:
+        return self._read_json(self._instagram_root / "trend_memory.json", [])
+
+    def save_instagram_trend_memory(self, trends: list[dict]) -> None:
+        self._write_json(self._instagram_root / "trend_memory.json", trends)
+
+    def load_instagram_hook_library(self) -> list[dict]:
+        return self._read_json(self._instagram_root / "hook_library.json", [])
+
+    def save_instagram_hook_library(self, hooks: list[dict]) -> None:
+        self._write_json(self._instagram_root / "hook_library.json", hooks)
+
+    def load_instagram_analysis_memory(self) -> list[dict]:
+        return self._read_json(self._instagram_root / "analysis_memory.json", [])
+
+    def save_instagram_analysis_memory(self, rows: list[dict]) -> None:
+        self._write_json(self._instagram_root / "analysis_memory.json", rows)
+
+    def load_instagram_trend_snapshots(self) -> list[dict]:
+        return self._read_json(self._instagram_root / "trend_snapshots.json", [])
+
+    def save_instagram_trend_snapshots(self, rows: list[dict]) -> None:
+        self._write_json(self._instagram_root / "trend_snapshots.json", rows)
+
+    def load_instagram_competitor_benchmarks(self) -> list[dict]:
+        return self._read_json(self._instagram_root / "competitor_benchmarks.json", [])
+
+    def save_instagram_competitor_benchmarks(self, rows: list[dict]) -> None:
+        self._write_json(self._instagram_root / "competitor_benchmarks.json", rows)
+
+    def load_instagram_reel_library(self) -> list[dict]:
+        return self._read_json(self._instagram_root / "reel_library.json", [])
+
+    def save_instagram_reel_library(self, rows: list[dict]) -> None:
+        self._write_json(self._instagram_root / "reel_library.json", rows)
+
+    def _read_json(self, path: Path, default: Any) -> Any:
+        try:
+            if path.exists():
+                return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+        return default

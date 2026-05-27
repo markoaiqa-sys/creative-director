@@ -308,3 +308,315 @@ class ScoringRequest(BaseModel):
     ad_copies: list[AdCopy]
     visual_concepts: list[VisualConcept]
     generated_creatives: list[GeneratedCreative]
+
+
+class ReelAnalysisCategory(str, Enum):
+    VISUAL_HOOK = "visual_hook"
+    OPENING_LINE = "opening_line"
+    EMOTIONAL_TRIGGER = "emotional_trigger"
+    PACING_STYLE = "pacing_style"
+    SCENE_DENSITY = "scene_density"
+    CTA_STYLE = "cta_style"
+    CAPTION_PATTERN = "caption_pattern"
+    AUDIO_TREND = "audio_trend"
+    COMPETITOR_PATTERN = "competitor_pattern"
+    TRANSITION_PATTERN = "transition_pattern"
+
+
+class ReelReference(BaseModel):
+    username: str | None = None
+    reel_url: str | None = None
+    caption: str | None = None
+    transcript: str | None = None
+    comments: list[str] = Field(default_factory=list)
+    audio_name: str | None = None
+    views: int | None = Field(default=None, ge=0)
+    likes: int | None = Field(default=None, ge=0)
+    shares: int | None = Field(default=None, ge=0)
+    saves: int | None = Field(default=None, ge=0)
+
+
+class ReelEngagementMetrics(BaseModel):
+    views: int | None = Field(default=None, ge=0)
+    likes: int | None = Field(default=None, ge=0)
+    comments: int | None = Field(default=None, ge=0)
+    shares: int | None = Field(default=None, ge=0)
+    saves: int | None = Field(default=None, ge=0)
+    engagement_rate: float | None = Field(default=None, ge=0.0)
+    retention_proxy: float | None = Field(default=None, ge=0.0)
+
+
+class NormalizedReelData(BaseModel):
+    reel_id: str
+    source: str = Field(default="instagram")
+    source_type: str = Field(default="competitor")
+    username: str | None = None
+    competitor_name: str | None = None
+    reel_url: str | None = None
+    caption: str = Field(default="")
+    transcript: str | None = None
+    hook_text: str | None = None
+    hook_type: str | None = None
+    audio_name: str | None = None
+    hashtags: list[str] = Field(default_factory=list)
+    comments: list[str] = Field(default_factory=list)
+    comment_sentiment: str | None = None
+    posted_at: datetime | None = None
+    posting_hour: int | None = Field(default=None, ge=0, le=23)
+    engagement: ReelEngagementMetrics = Field(default_factory=ReelEngagementMetrics)
+    retention_signals: list[str] = Field(default_factory=list)
+    visual_hooks: list[str] = Field(default_factory=list)
+    caption_patterns: list[str] = Field(default_factory=list)
+    trend_labels: list[str] = Field(default_factory=list)
+    raw_metadata: dict[str, Any] = Field(default_factory=dict)
+    fetched_at: datetime = Field(default_factory=datetime.utcnow)
+
+    def to_reference(self) -> ReelReference:
+        return ReelReference(
+            username=self.username or self.competitor_name,
+            reel_url=self.reel_url,
+            caption=self.caption,
+            transcript=self.transcript,
+            comments=self.comments,
+            audio_name=self.audio_name,
+            views=self.engagement.views,
+            likes=self.engagement.likes,
+            shares=self.engagement.shares,
+            saves=self.engagement.saves,
+        )
+
+
+class ReelTrendSnapshot(BaseModel):
+    snapshot_id: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    niche: str | None = None
+    audience: str | None = None
+    trend_name: str = Field(default="")
+    trend_score: int = Field(default=0, ge=0, le=100)
+    viral_probability: int = Field(default=0, ge=0, le=100)
+    saturation_level: str = Field(default="unknown")
+    source_reel_ids: list[str] = Field(default_factory=list)
+    hook_library: list[str] = Field(default_factory=list)
+    caption_patterns: list[str] = Field(default_factory=list)
+    audio_patterns: list[str] = Field(default_factory=list)
+    posting_time_patterns: list[str] = Field(default_factory=list)
+    momentum_delta: float = Field(default=0.0)
+    benchmark_score: int = Field(default=0, ge=0, le=100)
+    notes: str | None = None
+
+
+class InstagramIngestionRequest(BaseModel):
+    reel_urls: list[str] = Field(default_factory=list)
+    instagram_usernames: list[str] = Field(default_factory=list)
+    competitor_reels: list[ReelReference] = Field(default_factory=list)
+    trending_reels: list[ReelReference] = Field(default_factory=list)
+    niche: str | None = None
+    audience: str | None = None
+    max_reels: int = Field(default=20, ge=1, le=100)
+    include_comments: bool = True
+    include_metrics: bool = True
+    force_refresh: bool = False
+    cache_ttl_seconds: int = Field(default=1800, ge=0)
+    rate_limit_per_minute: int = Field(default=30, ge=1, le=120)
+    job_name: str | None = None
+    async_job: bool = True
+
+
+class InstagramIngestionJob(BaseModel):
+    job_id: str
+    status: str = Field(default="queued")
+    progress: int = Field(default=0, ge=0, le=100)
+    message: str = Field(default="queued")
+    request: InstagramIngestionRequest
+    result_count: int = Field(default=0, ge=0)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    finished_at: datetime | None = None
+    error: str | None = None
+
+
+class InstagramIngestionResult(BaseModel):
+    reels: list[NormalizedReelData] = Field(default_factory=list)
+    trend_snapshots: list[ReelTrendSnapshot] = Field(default_factory=list)
+    competitor_insights: list["CompetitorReelInsight"] = Field(default_factory=list)
+    benchmark_score: int = Field(default=0, ge=0, le=100)
+    hook_library: list[str] = Field(default_factory=list)
+    caption_patterns: list[str] = Field(default_factory=list)
+    hashtag_patterns: list[str] = Field(default_factory=list)
+    posting_time_patterns: list[str] = Field(default_factory=list)
+    audio_patterns: list[str] = Field(default_factory=list)
+    momentum_score: float = Field(default=0.0)
+    stored_snapshot_ids: list[str] = Field(default_factory=list)
+
+
+class ReelInsight(BaseModel):
+    category: ReelAnalysisCategory
+    insight: str = Field(..., min_length=5)
+    why_it_works: str = Field(..., min_length=5)
+    evidence: list[str] = Field(default_factory=list)
+    score: int = Field(default=0, ge=0, le=100)
+    recommendation: str = Field(..., min_length=5)
+
+
+class CompetitorReelInsight(BaseModel):
+    competitor: str = Field(..., min_length=1)
+    reel_url: str | None = None
+    hook_format: str = Field(..., min_length=3)
+    winning_pattern: str = Field(..., min_length=5)
+    cta_strategy: str = Field(..., min_length=3)
+    comment_sentiment: str | None = None
+    why_it_wins: str = Field(..., min_length=5)
+    reusable_formula: str = Field(..., min_length=5)
+    score: int = Field(default=0, ge=0, le=100)
+
+
+class ReelTrend(BaseModel):
+    trend_name: str = Field(..., min_length=3)
+    trend_score: int = Field(..., ge=0, le=100)
+    saturation_level: str = Field(..., min_length=3)
+    viral_probability: int = Field(..., ge=0, le=100)
+    best_niches: list[str] = Field(default_factory=list)
+    hook_examples: list[str] = Field(default_factory=list)
+    caption_patterns: list[str] = Field(default_factory=list)
+    editing_styles: list[str] = Field(default_factory=list)
+    retention_levers: list[str] = Field(default_factory=list)
+    source_count: int = Field(default=0, ge=0)
+
+
+class ReelSceneBeat(BaseModel):
+    second_range: str = Field(..., min_length=1)
+    scene: str = Field(..., min_length=5)
+    camera_direction: str = Field(..., min_length=3)
+    b_roll: list[str] = Field(default_factory=list)
+    text_overlay: list[str] = Field(default_factory=list)
+    editing_notes: list[str] = Field(default_factory=list)
+    sound_design: list[str] = Field(default_factory=list)
+    facial_expression: str | None = None
+    emotional_intent: str = Field(..., min_length=3)
+    retention_note: str = Field(..., min_length=5)
+    transition_timing: str | None = None
+    interruption_pattern: bool = False
+
+
+class ReelScoreBreakdown(BaseModel):
+    hook_strength: int = Field(default=0, ge=0, le=100)
+    virality: int = Field(default=0, ge=0, le=100)
+    retention: int = Field(default=0, ge=0, le=100)
+    shareability: int = Field(default=0, ge=0, le=100)
+    emotional_impact: int = Field(default=0, ge=0, le=100)
+    curiosity_gap: int = Field(default=0, ge=0, le=100)
+    thumbnail_quality: int = Field(default=0, ge=0, le=100)
+    cta_effectiveness: int = Field(default=0, ge=0, le=100)
+    total_score: int = Field(default=0, ge=0, le=100)
+    rationale: str = Field(default="", min_length=0)
+
+
+class ReelScript(BaseModel):
+    title: str = Field(default="", min_length=0)
+    viral_probability_score: int = Field(default=0, ge=0, le=100)
+    hook_strength_score: int = Field(default=0, ge=0, le=100)
+    audience_retention_prediction: int = Field(default=0, ge=0, le=100)
+    spoken_script: str = Field(default="", min_length=0)
+    scene_by_scene_direction: list[ReelSceneBeat] = Field(default_factory=list)
+    camera_direction: str = Field(default="", min_length=0)
+    b_roll_suggestions: list[str] = Field(default_factory=list)
+    caption_overlays: list[str] = Field(default_factory=list)
+    editing_notes: list[str] = Field(default_factory=list)
+    sound_design_suggestions: list[str] = Field(default_factory=list)
+    cta: str = Field(default="", min_length=0)
+    instagram_caption: str = Field(default="", min_length=0)
+    hashtag_suggestions: list[str] = Field(default_factory=list)
+    thumbnail_text: str = Field(default="", min_length=0)
+    emotional_progression: list[str] = Field(default_factory=list)
+    retention_strategy_explanation: str = Field(default="", min_length=0)
+    second_by_second_timeline: list[ReelSceneBeat] = Field(default_factory=list)
+    retention_critical_moments: list[str] = Field(default_factory=list)
+    dopamine_spikes: list[str] = Field(default_factory=list)
+    interruption_pattern_moments: list[str] = Field(default_factory=list)
+
+
+class InstagramReelsRequest(BaseModel):
+    brief: str = Field(..., min_length=3)
+    brand_name: str | None = None
+    niche: str | None = None
+    audience: str | None = None
+    creator_persona: str | None = None
+    goal: str | None = None
+    tone: str | None = None
+    duration_seconds: int = Field(default=30, ge=5, le=180)
+    hook_angle: str | None = None
+    call_to_action: str | None = None
+    transcript: str | None = None
+    caption: str | None = None
+    audio_trend_hint: str | None = None
+    editing_style_hint: str | None = None
+    extra_context: str | None = None
+    reel_links: list[str] = Field(default_factory=list)
+    instagram_usernames: list[str] = Field(default_factory=list)
+    competitor_reels: list[ReelReference] = Field(default_factory=list)
+    trending_reels: list[ReelReference] = Field(default_factory=list)
+    reference_reels: list[ReelReference] = Field(default_factory=list)
+    normalized_reels: list[NormalizedReelData] = Field(default_factory=list)
+    competitor_comments: list[str] = Field(default_factory=list)
+    hashtag_examples: list[str] = Field(default_factory=list)
+
+
+class InstagramAnalyzeReelRequest(InstagramReelsRequest):
+    pass
+
+
+class InstagramAnalyzeCompetitorRequest(InstagramReelsRequest):
+    pass
+
+
+class InstagramDetectTrendsRequest(InstagramReelsRequest):
+    pass
+
+
+class InstagramGenerateScriptRequest(InstagramReelsRequest):
+    pass
+
+
+class InstagramDirectReelRequest(InstagramGenerateScriptRequest):
+    pass
+
+
+class InstagramScoreReelRequest(InstagramReelsRequest):
+    candidate_hook: str | None = None
+    candidate_script: str | None = None
+    thumbnail_text: str | None = None
+    instagram_caption: str | None = None
+
+
+class InstagramReelsResponse(BaseModel):
+    title: str = Field(default="Instagram Reels Intelligence")
+    summary: str = Field(default="")
+    brand_name: str | None = None
+    niche: str | None = None
+    audience: str | None = None
+    viral_probability_score: int = Field(default=0, ge=0, le=100)
+    hook_strength_score: int = Field(default=0, ge=0, le=100)
+    audience_retention_prediction: int = Field(default=0, ge=0, le=100)
+    retention_score: int = Field(default=0, ge=0, le=100)
+    hook_alternatives: list[str] = Field(default_factory=list)
+    analysis: list[ReelInsight] = Field(default_factory=list)
+    competitor_winning_reels: list[CompetitorReelInsight] = Field(default_factory=list)
+    trend_objects: list[ReelTrend] = Field(default_factory=list)
+    top_performing_patterns: list[str] = Field(default_factory=list)
+    content_gaps: list[str] = Field(default_factory=list)
+    reusable_winning_formulas: list[str] = Field(default_factory=list)
+    recommendations: list[str] = Field(default_factory=list)
+    full_script: list[ReelSceneBeat] = Field(default_factory=list)
+    script: ReelScript = Field(default_factory=ReelScript)
+    director_notes: list[str] = Field(default_factory=list)
+    assumptions: list[str] = Field(default_factory=list)
+    instagram_caption: str = Field(default="")
+    hashtags: list[str] = Field(default_factory=list)
+    thumbnail_text: str = Field(default="")
+    scores: ReelScoreBreakdown = Field(default_factory=ReelScoreBreakdown)
+    second_by_second_timeline: list[ReelSceneBeat] = Field(default_factory=list)
+    retention_critical_moments: list[str] = Field(default_factory=list)
+    dopamine_spikes: list[str] = Field(default_factory=list)
+    interruption_pattern_moments: list[str] = Field(default_factory=list)
+    audio_trend: str | None = None
+    caption_pattern: str | None = None
