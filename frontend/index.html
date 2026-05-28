@@ -84,7 +84,18 @@
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="nav-icon-svg"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
         <span>Creative History</span>
       </button>
-      <div class="user-row"><div class="user-avatar" style="background: #ffffff; color: #000000;">D</div><div><div class="user-name">Demo Client</div><div class="user-role">Pro Plan</div></div></div>
+      <div class="user-row" style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+        <div style="display: flex; gap: 10px; align-items: center;">
+          <div class="user-avatar" id="user-avatar-element" style="background: #ffffff; color: #000000; overflow: hidden; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; font-weight: 800; font-size: 0.72rem;">D</div>
+          <div>
+            <div class="user-name" id="user-name-element" style="font-weight: 700; font-size: 0.88rem;">Demo Client</div>
+            <div class="user-role" id="user-email-element" style="color: #9a9a9a; font-size: 0.8rem;">Pro Plan</div>
+          </div>
+        </div>
+        <button id="auth-logout-btn" title="Log out" style="background: transparent; border: none; color: #a1a1aa; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; transition: color 0.2s;" type="button">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+        </button>
+      </div>
     </aside>
     <section class="main-panel">
       <div class="global-actions">
@@ -209,32 +220,264 @@
               </div>
               
               <!-- Analyze Output -->
-              <div id="reels-analyze-output" class="hidden stack">
-                <div class="instagram-ingestion-status" style="margin-bottom: 16px;">
+              <div id="reels-analyze-output" class="hidden reels-analysis-wrapper">
+                
+                <div class="instagram-ingestion-status" style="margin-bottom: 0;">
                   <div class="instagram-ingestion-status-row">
                     <strong>Analysis Complete</strong>
-                    <span>Visual dashboards & hook breakdowns generated.</span>
+                    <span id="reels-analyze-subject">Instagram Reel breakdown successfully generated.</span>
                   </div>
                 </div>
-                <div class="card" style="padding: 16px;">
-                  <h3 style="margin-top:0;">Reel Breakdown</h3>
-                  <div style="display: flex; gap: 16px; margin-top: 12px; flex-wrap: wrap;">
-                    <div style="flex: 1; min-width: 200px; padding: 12px; background: #111114; border-radius: 8px; border: 1px solid #27272a;">
-                      <strong>Opening Line (0-2s)</strong>
-                      <p style="color: #a1a1aa; font-style: italic; margin: 4px 0 0 0;">"Stop doing this one thing if you want to grow..."</p>
+
+                <!-- SECTION 1: VISUAL STATISTICS -->
+                <div class="reels-section-card">
+                  <h3 class="reels-section-title-premium">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #ffffff; margin-bottom: -3px; display: inline-block; vertical-align: middle;"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+                    Viral Performance Predictors
+                  </h3>
+                  <div class="reels-stats-grid">
+                    <!-- Metric 1: Hook Rate -->
+                    <div class="reels-stat-card-premium">
+                      <div class="reels-stat-label">Hook Rate (3s)</div>
+                      <div class="reels-stat-value">84.2%</div>
+                      <div class="reels-stat-progress-bar">
+                        <div class="reels-stat-progress-fill" style="width: 84.2%;"></div>
+                      </div>
+                      <div class="reels-stat-desc">Exceptional scroll-stop. Top 1.5% of verified niches.</div>
                     </div>
-                    <div style="flex: 1; min-width: 200px; padding: 12px; background: #111114; border-radius: 8px; border: 1px solid #27272a;">
-                      <strong>Visual Hook</strong>
-                      <p style="color: #a1a1aa; margin: 4px 0 0 0;">Fast motion pointing at screen, bold yellow text overlay.</p>
+                    <!-- Metric 2: Avg Retention -->
+                    <div class="reels-stat-card-premium">
+                      <div class="reels-stat-label">Retention Ratio</div>
+                      <div class="reels-stat-value">74.4%</div>
+                      <div class="reels-stat-progress-bar">
+                        <div class="reels-stat-progress-fill" style="width: 74.4%;"></div>
+                      </div>
+                      <div class="reels-stat-desc">High watch-time velocity, signaling strong organic push.</div>
+                    </div>
+                    <!-- Metric 3: Share Velocity -->
+                    <div class="reels-stat-card-premium">
+                      <div class="reels-stat-label">Share Velocity</div>
+                      <div class="reels-stat-value">8.9%</div>
+                      <div class="reels-stat-progress-bar">
+                        <div class="reels-stat-progress-fill" style="width: 89%;"></div>
+                      </div>
+                      <div class="reels-stat-desc">Massive amplification factor. Exceeds viral threshold (3.5%).</div>
+                    </div>
+                    <!-- Metric 4: Replay Index -->
+                    <div class="reels-stat-card-premium">
+                      <div class="reels-stat-label">Replay Index</div>
+                      <div class="reels-stat-value">1.8x</div>
+                      <div class="reels-stat-progress-bar">
+                        <div class="reels-stat-progress-fill" style="width: 90%;"></div>
+                      </div>
+                      <div class="reels-stat-desc">Substantial repeat views boosted by seamless video looping.</div>
                     </div>
                   </div>
-                  <h4 style="margin-top: 16px; margin-bottom: 8px;">Timeline Captions</h4>
-                  <ul style="list-style: none; padding: 0; margin: 0; color: #a1a1aa; font-size: 0.9rem;">
-                    <li style="margin-bottom: 4px;"><strong style="color: #fff;">0:00</strong> Stop doing this one thing</li>
-                    <li style="margin-bottom: 4px;"><strong style="color: #fff;">0:02</strong> If you want to grow on Instagram</li>
-                    <li style="margin-bottom: 4px;"><strong style="color: #fff;">0:05</strong> The algorithm completely changed today</li>
-                  </ul>
                 </div>
+
+                <!-- SECTION 2: HOOK BREAKDOWN -->
+                <div class="reels-section-card">
+                  <h3 class="reels-section-title-premium">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #ffffff; margin-bottom: -3px; display: inline-block; vertical-align: middle;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                    Core Hook Intelligence
+                  </h3>
+                  <div class="reels-hooks-grid">
+                    <!-- Opening Line Hook -->
+                    <div class="reels-hook-card-premium">
+                      <div class="reels-hook-header">
+                        <span class="reels-hook-tag">Opening Line Hook</span>
+                        <span class="reels-hook-duration">0-2s</span>
+                      </div>
+                      <div class="reels-hook-content" id="reels-out-opening-hook">
+                        "Stop doing this one thing if you want to grow..."
+                      </div>
+                      <div class="reels-hook-why">
+                        <strong>Why it worked (Loss Aversion Strategy)</strong>
+                        Triggers negativity bias. Human psychology is naturally wired to avoid losses or errors more than acquiring gains. Explicitly warning viewers to "stop doing this" immediately halts their scroll by raising curiosity about what mistakes they might be committing.
+                      </div>
+                    </div>
+                    <!-- Visual Hook -->
+                    <div class="reels-hook-card-premium">
+                      <div class="reels-hook-header">
+                        <span class="reels-hook-tag visual">Visual Hook</span>
+                        <span class="reels-hook-duration">0-2s</span>
+                      </div>
+                      <div class="reels-hook-content" id="reels-out-visual-hook">
+                        Fast motion pointing at screen, bold yellow text overlay.
+                      </div>
+                      <div class="reels-hook-why">
+                        <strong>Why it worked (Visual Orienting Reflex)</strong>
+                        Fast movement in the first 0.5s commands immediate attention. Bold yellow typography stands out heavily in dark-mode feeds and registers instant semantic value without audio, catering directly to the 85% of users scrolling on mute.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- SECTION 3: TIMELINE CAPTIONS (5 SEC EACH, SECTION-WISE WITH SQUARE BOX) -->
+                <div class="reels-section-card">
+                  <h3 class="reels-section-title-premium">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #ffffff; margin-bottom: -3px; display: inline-block; vertical-align: middle;"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line><line x1="2" y1="7" x2="7" y2="7"></line><line x1="2" y1="17" x2="7" y2="17"></line><line x1="17" y1="17" x2="22" y2="17"></line><line x1="17" y1="7" x2="22" y2="7"></line></svg>
+                    Segmented Storyboard Timeline (5s intervals)
+                  </h3>
+                  <div class="reels-timeline-horizontal">
+                    <!-- Frame 1 -->
+                    <div class="reels-timeline-square-card">
+                      <div class="reels-timeline-square-header">
+                        <span class="reels-timeline-time-badge">0:00 - 0:05</span>
+                        <span class="reels-timeline-title">Hook Frame</span>
+                      </div>
+                      <div class="reels-timeline-square-box">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-bottom: 4px;"><circle cx="12" cy="12" r="10"></circle><polygon points="10 8 16 12 10 16 10 8"></polygon></svg>
+                        <span>SCENE 1 (Hook)</span>
+                      </div>
+                      <p class="reels-timeline-caption">"Stop doing this one thing if you want to grow on Instagram."</p>
+                      <p class="reels-timeline-visual-desc"><strong>Visual:</strong> Creator points directly at screen. Large flashing yellow text overlay.</p>
+                    </div>
+                    <!-- Frame 2 -->
+                    <div class="reels-timeline-square-card">
+                      <div class="reels-timeline-square-header">
+                        <span class="reels-timeline-time-badge">0:05 - 0:10</span>
+                        <span class="reels-timeline-title">Disruption</span>
+                      </div>
+                      <div class="reels-timeline-square-box">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-bottom: 4px;"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                        <span>SCENE 2 (Break)</span>
+                      </div>
+                      <p class="reels-timeline-caption">"The algorithm completely changed today, and old methods are dead."</p>
+                      <p class="reels-timeline-visual-desc"><strong>Visual:</strong> Dynamic transition to screen recording of insights panel with marker circles.</p>
+                    </div>
+                    <!-- Frame 3 -->
+                    <div class="reels-timeline-square-card">
+                      <div class="reels-timeline-square-header">
+                        <span class="reels-timeline-time-badge">0:10 - 0:15</span>
+                        <span class="reels-timeline-title">Evidence</span>
+                      </div>
+                      <div class="reels-timeline-square-box">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-bottom: 4px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                        <span>SCENE 3 (Proof)</span>
+                      </div>
+                      <p class="reels-timeline-caption">"I tested this on three separate accounts, and views jumped by 300%."</p>
+                      <p class="reels-timeline-visual-desc"><strong>Visual:</strong> Zoom-in on a steep positive-slope chart highlighting views increase.</p>
+                    </div>
+                    <!-- Frame 4 -->
+                    <div class="reels-timeline-square-card">
+                      <div class="reels-timeline-square-header">
+                        <span class="reels-timeline-time-badge">0:15 - 0:20</span>
+                        <span class="reels-timeline-title">Actionable Value</span>
+                      </div>
+                      <div class="reels-timeline-square-box">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-bottom: 4px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                        <span>SCENE 4 (Value)</span>
+                      </div>
+                      <p class="reels-timeline-caption">"Stop posting daily. Instead, optimize heavily for shareability."</p>
+                      <p class="reels-timeline-visual-desc"><strong>Visual:</strong> Split-screen graphic showing 'Posting Daily (❌)' vs 'Shareable Quality (✅)'.</p>
+                    </div>
+                    <!-- Frame 5 -->
+                    <div class="reels-timeline-square-card">
+                      <div class="reels-timeline-square-header">
+                        <span class="reels-timeline-time-badge">0:20 - 0:25</span>
+                        <span class="reels-timeline-title">Call to Action</span>
+                      </div>
+                      <div class="reels-timeline-square-box">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-bottom: 4px;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                        <span>SCENE 5 (CTA)</span>
+                      </div>
+                      <p class="reels-timeline-caption">"Comment 'GROW' and I'll DM you my secret viral distribution checklist."</p>
+                      <p class="reels-timeline-visual-desc"><strong>Visual:</strong> Creator pointing downwards to comments. Glowing text box overlay.</p>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- SECTION 4: 10 REASONS WHY THE REEL WENT VIRAL -->
+                <div class="reels-section-card">
+                  <h3 class="reels-section-title-premium">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #ffffff; margin-bottom: -3px; display: inline-block; vertical-align: middle;"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                    Top 10 Virality Catalyst Factors
+                  </h3>
+                  <div class="reels-reasons-premium-grid">
+                    <!-- Reason 1 -->
+                    <div class="reels-reason-card-premium">
+                      <div class="reels-reason-number">1</div>
+                      <div class="reels-reason-body">
+                        <h4 class="reels-reason-title">Loss Aversion Hook</h4>
+                        <p class="reels-reason-desc">Starting with "Stop doing this" triggers immediate risk aversion in the amygdala, making viewers pause to verify if they are losing value.</p>
+                      </div>
+                    </div>
+                    <!-- Reason 2 -->
+                    <div class="reels-reason-card-premium">
+                      <div class="reels-reason-number">2</div>
+                      <div class="reels-reason-body">
+                        <h4 class="reels-reason-title">Micro-Movement in Frame 1</h4>
+                        <p class="reels-reason-desc">Instant pointing gesture and a subtle camera shake inside the first 500ms block the viewer's scroll orienting reflex, forcing physical attention.</p>
+                      </div>
+                    </div>
+                    <!-- Reason 3 -->
+                    <div class="reels-reason-card-premium">
+                      <div class="reels-reason-number">3</div>
+                      <div class="reels-reason-body">
+                        <h4 class="reels-reason-title">Silent Optimization</h4>
+                        <p class="reels-reason-desc">Large high-contrast yellow overlays convey the full hook value immediately without requiring audio, securing viewers browsing on mute (85%).</p>
+                      </div>
+                    </div>
+                    <!-- Reason 4 -->
+                    <div class="reels-reason-card-premium">
+                      <div class="reels-reason-number">4</div>
+                      <div class="reels-reason-body">
+                        <h4 class="reels-reason-title">3-Second Pattern Interrupt</h4>
+                        <p class="reels-reason-desc">Switching from a talking head shot to a dynamic screen recording disrupts visual habituation, boosting early retention scores.</p>
+                      </div>
+                    </div>
+                    <!-- Reason 5 -->
+                    <div class="reels-reason-card-premium">
+                      <div class="reels-reason-number">5</div>
+                      <div class="reels-reason-body">
+                        <h4 class="reels-reason-title">Curiosity Gap Opening</h4>
+                        <p class="reels-reason-desc">Claiming "the algorithm completely changed today" constructs a high-urgency information void, encouraging viewers to watch until the resolution.</p>
+                      </div>
+                    </div>
+                    <!-- Reason 6 -->
+                    <div class="reels-reason-card-premium">
+                      <div class="reels-reason-number">6</div>
+                      <div class="reels-reason-body">
+                        <h4 class="reels-reason-title">High-Authority Social Proof</h4>
+                        <p class="reels-reason-desc">Displaying the traffic metrics screenshots validates claims instantly, building immediate audience trust and increasing subscription rates.</p>
+                      </div>
+                    </div>
+                    <!-- Reason 7 -->
+                    <div class="reels-reason-card-premium">
+                      <div class="reels-reason-number">7</div>
+                      <div class="reels-reason-body">
+                        <h4 class="reels-reason-title">Frictionless CTA Architecture</h4>
+                        <p class="reels-reason-desc">Commanding "Comment GROW" is a low-effort commitment that triggers automated DMs, spiking comment section metrics and forcing the algorithm to boost reach.</p>
+                      </div>
+                    </div>
+                    <!-- Reason 8 -->
+                    <div class="reels-reason-card-premium">
+                      <div class="reels-reason-number">8</div>
+                      <div class="reels-reason-body">
+                        <h4 class="reels-reason-title">Optimal Pace of Edits</h4>
+                        <p class="reels-reason-desc">Frame cuts and caption updates occur at a steady 1.5 - 2s rhythm, matching the fast attention span of social consumers and preventing drop-offs.</p>
+                      </div>
+                    </div>
+                    <!-- Reason 9 -->
+                    <div class="reels-reason-card-premium">
+                      <div class="reels-reason-number">9</div>
+                      <div class="reels-reason-body">
+                        <h4 class="reels-reason-title">Algorithmic Looping Structure</h4>
+                        <p class="reels-reason-desc">The CTA flows straight into the opening line hook seamlessly. When the video repeats, viewers watch the first 2-3s again, raising the watch-time score.</p>
+                      </div>
+                    </div>
+                    <!-- Reason 10 -->
+                    <div class="reels-reason-card-premium">
+                      <div class="reels-reason-number">10</div>
+                      <div class="reels-reason-body">
+                        <h4 class="reels-reason-title">Broad Audience Resonator</h4>
+                        <p class="reels-reason-desc">Instead of hyper-specific parameters, focusing on the universal desire to "grow on Instagram" appeals to the broad explore page, ensuring wide distribution.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
               </div>
             </div>
 
@@ -462,9 +705,8 @@
         </div>
       </div>
       <div class="kb-tabs" style="display: flex; gap: 10px; margin-bottom: 12px; border-bottom: 1px solid var(--line, #27272a); padding-bottom: 8px;">
-        <button class="tab-btn active" data-kb-tab="generation" onclick="switchKbTab('generation')">Previous Generations</button>
         <button class="tab-btn" data-kb-tab="asset" onclick="switchKbTab('asset')">Company Assets</button>
-        <button class="tab-btn" data-kb-tab="upload" onclick="switchKbTab('upload')">Uploaded Files</button>
+        <button class="tab-btn active" data-kb-tab="upload" onclick="switchKbTab('upload')">Uploaded Files</button>
       </div>
       <p id="kb-hint-text" style="color:var(--muted,#666);margin-bottom:12px;margin-top:0;">Select one or more images to use as sample context for generation.</p>
       <div id="kb-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;max-height:60vh;overflow:auto;padding:6px;"></div>

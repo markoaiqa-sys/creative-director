@@ -61,11 +61,32 @@ setupVideoUploadLimit("reels-gen-ref-file", "reels-gen-ref-file-name");
 
 function runReelsAnalyze() {
   const btn = document.getElementById("btn-reels-analyze");
+  const urlInput = document.getElementById("reels-analyze-url");
+  const fileInput = document.getElementById("reels-analyze-file");
+  const subjectDisplay = document.getElementById("reels-analyze-subject");
+
   btn.textContent = "Analyzing...";
   btn.disabled = true;
   
+  // Clear output visibility during analysis
+  document.getElementById("reels-analyze-output").classList.add("hidden");
+  
   // Simulate network delay
   setTimeout(() => {
+    let subjectText = "Instagram Reel breakdown successfully generated.";
+    const url = urlInput ? urlInput.value.trim() : "";
+    const file = (fileInput && fileInput.files && fileInput.files[0]) ? fileInput.files[0].name : "";
+
+    if (url) {
+      subjectText = `Breakdown generated for URL: <a href="${url}" target="_blank" style="color: #ffffff; text-decoration: underline; font-weight: 600;">${url.substring(0, 45)}${url.length > 45 ? '...' : ''}</a>`;
+    } else if (file) {
+      subjectText = `Breakdown generated for uploaded file: <strong style="color: #ffffff; font-weight: 600;">${file}</strong>`;
+    } else {
+      subjectText = `Breakdown generated for demo reference reel.`;
+    }
+
+    if (subjectDisplay) subjectDisplay.innerHTML = subjectText;
+
     document.getElementById("reels-analyze-output").classList.remove("hidden");
     btn.textContent = "Analyze Reel";
     btn.disabled = false;

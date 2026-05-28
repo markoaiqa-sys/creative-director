@@ -63,7 +63,6 @@ class Settings(BaseSettings):
     supabase_url: str | None = None
     db_pool_min_size: int = 1
     db_pool_max_size: int = 5
-    google_client_id: str | None = None
     api_auth_enabled: bool = False
     app_api_key: str | None = None
 

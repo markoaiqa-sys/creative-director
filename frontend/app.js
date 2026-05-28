@@ -24,7 +24,7 @@ window.fetch = async function () {
     if (isGuest) config.headers["X-Is-Guest"] = isGuest;
   }
   
-  return originalFetch(resource, config);
+  return originalFetch.call(window, resource, config);
 };
 
 // --- Auth Initialization ---
@@ -39,6 +39,30 @@ document.addEventListener("DOMContentLoaded", () => {
     overlay.style.display = "none";
   }
 
+  // Inject user profile details if logged in
+  if (authEmail) {
+    const nameEl = document.getElementById("user-name-element");
+    const emailEl = document.getElementById("user-email-element");
+    const avatarEl = document.getElementById("user-avatar-element");
+    const authName = localStorage.getItem("auth_name");
+    const authPicture = localStorage.getItem("auth_picture");
+
+    if (nameEl) {
+      nameEl.textContent = isGuest === "true" ? "Guest User" : (authName || "Logged In User");
+    }
+    if (emailEl) {
+      emailEl.textContent = authEmail;
+    }
+    if (avatarEl) {
+      if (isGuest !== "true" && authPicture) {
+        avatarEl.innerHTML = `<img src="${authPicture}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;" referrerPolicy="no-referrer">`;
+      } else {
+        const displayLetter = (authName || authEmail || "D").charAt(0).toUpperCase();
+        avatarEl.textContent = displayLetter;
+      }
+    }
+  }
+
   const loginForm = document.getElementById("login-form");
   if (loginForm) {
     loginForm.addEventListener("submit", (e) => {
@@ -47,6 +71,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (email) {
         localStorage.setItem("auth_email", email);
         localStorage.setItem("is_guest", "false");
+        localStorage.setItem("auth_name", email.split('@')[0]);
         overlay.style.display = "none";
         window.location.reload(); // Reload to fetch client-specific data
       }
@@ -58,8 +83,22 @@ document.addEventListener("DOMContentLoaded", () => {
     guestBtn.addEventListener("click", () => {
       localStorage.setItem("auth_email", "guest@marko.ai");
       localStorage.setItem("is_guest", "true");
+      localStorage.setItem("auth_name", "Guest Client");
       overlay.style.display = "none";
       window.location.reload(); // Reload to clear previous state
+    });
+  }
+
+  // Logout listener
+  const logoutBtn = document.getElementById("auth-logout-btn");
+  if (logoutBtn) {
+    logoutBtn.addEventListener("click", () => {
+      localStorage.removeItem("auth_email");
+      localStorage.removeItem("is_guest");
+      localStorage.removeItem("auth_name");
+      localStorage.removeItem("auth_picture");
+      localStorage.removeItem("chat_session_id");
+      window.location.reload();
     });
   }
 });
@@ -594,9 +633,7 @@ function switchKbTab(tabName) {
   });
   const hintText = document.getElementById("kb-hint-text");
   if (hintText) {
-    if (tabName === "generation") {
-      hintText.textContent = "View your previously generated ad campaigns.";
-    } else if (tabName === "asset") {
+    if (tabName === "asset") {
       hintText.textContent = "Company logo and assets used in campaigns.";
     } else {
       hintText.textContent = "Select one or more uploaded images to use as sample context.";
@@ -618,7 +655,7 @@ function openKbModal(tabName = "upload") {
   }
   // Check if event object was passed instead of string (default UI click)
   if (typeof tabName !== 'string') {
-    tabName = "generation";
+    tabName = "upload";
   }
   switchKbTab(tabName);
 }
@@ -642,7 +679,6 @@ async function fetchKnowledgeBaseImages() {
         if (typeof tags === 'string') tags = [tags];
         else tags = [];
       }
-      if (activeKbTab === "generation") return tags.includes("generation");
       if (activeKbTab === "asset") return tags.includes("asset");
       return tags.includes("upload") || (!tags.includes("generation") && !tags.includes("asset"));
     });
@@ -3117,11 +3153,32 @@ setupVideoUploadLimit("reels-gen-ref-file", "reels-gen-ref-file-name");
 
 function runReelsAnalyze() {
   const btn = document.getElementById("btn-reels-analyze");
+  const urlInput = document.getElementById("reels-analyze-url");
+  const fileInput = document.getElementById("reels-analyze-file");
+  const subjectDisplay = document.getElementById("reels-analyze-subject");
+
   btn.textContent = "Analyzing...";
   btn.disabled = true;
   
+  // Clear output visibility during analysis
+  document.getElementById("reels-analyze-output").classList.add("hidden");
+  
   // Simulate network delay
   setTimeout(() => {
+    let subjectText = "Instagram Reel breakdown successfully generated.";
+    const url = urlInput ? urlInput.value.trim() : "";
+    const file = (fileInput && fileInput.files && fileInput.files[0]) ? fileInput.files[0].name : "";
+
+    if (url) {
+      subjectText = `Breakdown generated for URL: <a href="${url}" target="_blank" style="color: #ffffff; text-decoration: underline; font-weight: 600;">${url.substring(0, 45)}${url.length > 45 ? '...' : ''}</a>`;
+    } else if (file) {
+      subjectText = `Breakdown generated for uploaded file: <strong style="color: #ffffff; font-weight: 600;">${file}</strong>`;
+    } else {
+      subjectText = `Breakdown generated for demo reference reel.`;
+    }
+
+    if (subjectDisplay) subjectDisplay.innerHTML = subjectText;
+
     document.getElementById("reels-analyze-output").classList.remove("hidden");
     btn.textContent = "Analyze Reel";
     btn.disabled = false;
