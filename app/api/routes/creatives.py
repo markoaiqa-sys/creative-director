@@ -93,7 +93,7 @@ async def api_score_and_package(
 ) -> CampaignPackage:
     try:
         is_guest_bool = x_is_guest == "true"
-        return await engine.score_and_package(
+        package = await engine.score_and_package(
             payload=req.payload,
             hooks=req.hooks,
             angles=req.angles,
@@ -103,6 +103,28 @@ async def api_score_and_package(
             client_email=x_client_email,
             is_guest=is_guest_bool,
         )
+        # Automatically add generated final images to the Knowledge Base
+        if package and package.creatives:
+            for c in package.creatives:
+                if c.rendered_image_path:
+                    # rendered_image_path is usually like /output/campaign_slug/timestamp/file.png
+                    rel_path = c.rendered_image_path.lstrip("/")
+                    if rel_path.startswith("output/"):
+                        rel_path = rel_path[7:]
+                    
+                    local_path = engine._storage._output_root / rel_path
+                    if local_path.exists():
+                        try:
+                            data = local_path.read_bytes()
+                            engine._storage.save_kb_image_from_bytes(
+                                filename=local_path.name,
+                                data=data,
+                                title=f"Generated: {c.headline or c.concept_id}",
+                                tags=["generation"]
+                            )
+                        except Exception as e:
+                            print(f"[WARN] Failed to save generated image to KB: {e}")
+        return package
     except Exception as exc:
         print(f"[ERROR] score_and_package failed: {exc}")
         import traceback
@@ -134,13 +156,15 @@ async def get_campaign_history(
 async def upload_kb_image(
     file: UploadFile = File(...),
     title: str | None = Form(None),
+    tags: str | None = Form(None),
     _actor: str = Depends(require_api_auth),
     engine: CreativeDirectorEngine = Depends(get_engine),
 ) -> dict:
     """Upload an image to the knowledge base."""
     try:
         data = await file.read()
-        entry = engine._storage.save_kb_image_from_bytes(file.filename, data, title=title)
+        tags_list = [t.strip() for t in tags.split(",")] if tags else None
+        entry = engine._storage.save_kb_image_from_bytes(file.filename, data, title=title, tags=tags_list)
         return entry
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc

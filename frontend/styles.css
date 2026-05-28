@@ -16,7 +16,10 @@
 html,
 body {
   margin: 0;
-  height: 100%;
+  height: 100vh;
+  min-height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   color: var(--ink);
   background: #09090b;
@@ -31,7 +34,9 @@ button {
 }
 
 .app-shell {
-  min-height: 100vh;
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr) 360px;
   transition: grid-template-columns 0.3s ease;
@@ -149,15 +154,31 @@ button {
   font-size: 0.8rem;
 }
 
+.global-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 12px 24px;
+  border-bottom: 1px solid #27272a;
+  background: #09090b;
+}
+
 .main-panel {
   border-right: 1px solid #27272a;
   background: #09090b;
+  height: 100vh;
+  max-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .canvas {
   padding: 24px;
-  max-height: 100vh;
-  overflow: auto;
+  height: 100%;
+  flex: 1;
+  overflow-y: auto;
+  box-sizing: border-box;
 }
 
 .hero h1 {
@@ -239,6 +260,10 @@ button {
   padding: 0 16px;
   font-weight: 600;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
 .form-card {
@@ -1057,24 +1082,32 @@ button {
 }
 
 .reels-pipeline-strip {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 8px;
+  display: flex;
+  background: #111114;
+  border: 1px solid #27272a;
+  border-radius: 14px;
+  overflow: hidden;
 }
 
 .reels-pipeline-step {
+  flex: 1;
   position: relative;
   padding: 12px 14px;
-  border-radius: 14px;
-  border: 1px solid #27272a;
-  background: #111114;
+  background: transparent;
+  border-right: 1px solid #27272a;
   color: #71717a;
   font-size: 0.82rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   text-align: center;
-  transition: transform 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+  transition: transform 0.2s ease, background 0.2s ease, color 0.2s ease;
+  cursor: default;
+  pointer-events: none;
+}
+
+.reels-pipeline-step:last-child {
+  border-right: none;
 }
 
 .reels-pipeline-step.is-active {
@@ -1959,6 +1992,22 @@ button {
 }
 
 @media (max-width: 1260px) {
+  html,
+  body,
+  .app-shell,
+  .main-panel {
+    height: auto !important;
+    max-height: none !important;
+    min-height: auto !important;
+    overflow: auto !important;
+  }
+
+  .canvas {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
   .app-shell {
     grid-template-columns: 240px minmax(0, 1fr);
   }
@@ -2067,7 +2116,9 @@ button {
 
   .canvas {
     padding: 12px;
-    max-height: 100vh;
+    max-height: none !important;
+    height: auto !important;
+    overflow: visible !important;
   }
 
   .image-modal-content {
@@ -2201,7 +2252,7 @@ button {
   color: #ffffff;
   margin: -24px; /* offset the canvas padding */
   padding: 24px;
-  min-height: calc(100vh - 0px);
+  min-height: 100%;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;

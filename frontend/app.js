@@ -577,16 +577,46 @@ function closeImageModal() {
   }
 }
 
-function openKbModal() {
-  const modal = document.getElementById("kbModal");
+let activeKbTab = "upload";
+
+function switchKbTab(tabName) {
+  activeKbTab = tabName;
+  document.querySelectorAll(".kb-tabs .tab-btn").forEach(btn => {
+    if (btn.dataset.kbTab === tabName) {
+      btn.classList.add("active");
+    } else {
+      btn.classList.remove("active");
+    }
+  });
+  const hintText = document.getElementById("kb-hint-text");
+  if (hintText) {
+    if (tabName === "generation") {
+      hintText.textContent = "View your previously generated ad campaigns.";
+    } else if (tabName === "asset") {
+      hintText.textContent = "Company logo and assets used in campaigns.";
+    } else {
+      hintText.textContent = "Select one or more uploaded images to use as sample context.";
+    }
+  }
+  const uploadBtn = document.getElementById("kb-upload-btn");
+  if (uploadBtn) {
+    uploadBtn.style.display = (tabName === "upload") ? "inline-flex" : "none";
+  }
   const grid = document.getElementById("kb-grid");
+  if (grid) grid.innerHTML = `<div style="padding:12px;color:var(--muted,#666);">Loading...</div>`;
+  fetchKnowledgeBaseImages();
+}
+
+function openKbModal(tabName = "upload") {
+  const modal = document.getElementById("kbModal");
   if (modal) {
     modal.classList.remove("hidden");
   }
-  if (grid) {
-    grid.innerHTML = `<div style="padding:12px;color:var(--muted,#666);">Loading...</div>`;
+  // Check if event object was passed instead of string (default UI click)
+  if (typeof tabName !== 'string') {
+    tabName = "generation";
   }
-  fetchKnowledgeBaseImages();
+  switchKbTab(tabName);
 }
 
 function closeKbModal() {
@@ -600,7 +630,19 @@ async function fetchKnowledgeBaseImages() {
     const res = await fetch(endpoint);
     if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
     const data = await res.json();
-    const items = data?.items || [];
+    let items = data?.items || [];
+    
+    items = items.filter(item => {
+      let tags = item.tags;
+      if (!Array.isArray(tags)) {
+        if (typeof tags === 'string') tags = [tags];
+        else tags = [];
+      }
+      if (activeKbTab === "generation") return tags.includes("generation");
+      if (activeKbTab === "asset") return tags.includes("asset");
+      return tags.includes("upload") || (!tags.includes("generation") && !tags.includes("asset"));
+    });
+    
     renderKbGrid(items);
   } catch (e) {
     const grid = document.getElementById("kb-grid");
@@ -2231,6 +2273,20 @@ async function buildPayload() {
 }
 
 async function executeCampaignPipeline(payload) {
+  // Upload logo as asset to KB
+  const logoInput = byId("f-logo");
+  if (logoInput && logoInput.files && logoInput.files[0]) {
+    try {
+      const fd = new FormData();
+      fd.append("file", logoInput.files[0], logoInput.files[0].name);
+      fd.append("title", `${byId("f-brand").value || "asset"} - ${logoInput.files[0].name}`);
+      fd.append("tags", "asset");
+      await fetch(`${API_BASE_URL}/knowledge-base/images`, { method: "POST", body: fd });
+    } catch (e) {
+      console.warn("Logo KB upload failed", e);
+    }
+  }
+
   // If user uploaded sample files, save them to knowledge base first
   if (selectedSampleFiles.length) {
     const files = selectedSampleFiles.slice(0, MAX_SAMPLE_IMAGES);
@@ -2239,6 +2295,7 @@ async function executeCampaignPipeline(payload) {
         const fd = new FormData();
         fd.append("file", f, f.name);
         fd.append("title", `${byId("f-brand").value || "sample"} - ${f.name}`);
+        fd.append("tags", "upload");
         await fetch(`${API_BASE_URL}/knowledge-base/images`, { method: "POST", body: fd });
       } catch (e) {
         console.warn("KB upload failed", e);
@@ -2426,6 +2483,14 @@ function wireEvents() {
   const supBtnKb = byId("sup-btn-kb");
   if (supBtnKb) {
     supBtnKb.addEventListener("click", openKbModal);
+  }
+
+  const supBtnTrain = byId("sup-btn-train");
+  if (supBtnTrain) {
+    supBtnTrain.addEventListener("click", () => {
+      const uploadInput = byId("kb-upload-input");
+      if (uploadInput) uploadInput.click();
+    });
   }
 
   document.querySelectorAll(".tab").forEach((tab) => {
@@ -2950,27 +3015,37 @@ if (btnChatClose && btnChatOpen && appShell) {
 const kbUploadInput = document.getElementById("kb-upload-input");
 if (kbUploadInput) {
   kbUploadInput.addEventListener("change", async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
     
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("title", file.name);
-    
-    try {
-      const endpoint = (API_BASE_URL ? API_BASE_URL.replace(/\/+$/,'') : '') + '/knowledge-base/images';
-      const res = await fetch(endpoint, {
-        method: "POST",
-        body: formData
-      });
-      if (!res.ok) throw new Error("Upload failed");
-      // Clear input and refresh grid
-      kbUploadInput.value = "";
-      fetchKnowledgeBaseImages();
-    } catch (err) {
-      console.error("Upload error", err);
-      alert("Failed to upload image.");
+    const endpoint = (API_BASE_URL ? API_BASE_URL.replace(/\/+$/,'') : '') + '/knowledge-base/images';
+    let hasError = false;
+
+    for (const file of files) {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("title", file.name);
+      formData.append("tags", activeKbTab === "asset" ? "asset" : "upload");
+      
+      try {
+        const res = await fetch(endpoint, {
+          method: "POST",
+          body: formData
+        });
+        if (!res.ok) throw new Error("Upload failed for " + file.name);
+      } catch (err) {
+        console.error("Upload error", err);
+        hasError = true;
+      }
     }
+
+    if (hasError) {
+      alert("Failed to upload some or all images.");
+    }
+    
+    // Clear input and refresh grid
+    kbUploadInput.value = "";
+    fetchKnowledgeBaseImages();
   });
 }
 

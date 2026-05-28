@@ -87,6 +87,17 @@
       <div class="user-row"><div class="user-avatar" style="background: #ffffff; color: #000000;">D</div><div><div class="user-name">Demo Client</div><div class="user-role">Pro Plan</div></div></div>
     </aside>
     <section class="main-panel">
+      <div class="global-actions">
+        <button class="top-pill" id="sup-btn-kb" type="button">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>Knowledge Base
+        </button>
+        <button class="top-pill" id="sup-btn-train" type="button">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>Train Model
+        </button>
+        <button class="top-pill" type="button" onclick="showDashboard()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>Run Analysis
+        </button>
+      </div>
       <div class="canvas">
         <section class="supervisor-panel" id="supervisor-panel">
           <div class="supervisor-header">
@@ -103,17 +114,6 @@
                 <p>Orchestrator</p>
               </div>
             </div>
-            <div class="supervisor-header-right">
-              <button class="top-pill" id="sup-btn-kb" type="button">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>Knowledge Base
-              </button>
-              <button class="top-pill" type="button">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>Train Model
-              </button>
-              <button class="top-pill" type="button" onclick="showDashboard()">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>Run Analysis
-              </button>
-            </div>
           </div>
           <div class="supervisor-centered">
             <div class="supervisor-bars" style="margin-bottom: 24px;">
@@ -128,10 +128,6 @@
         <section class="hero hidden" id="hero-card">
           <div class="hero-head">
             <h1>Strategy Dashboard</h1>
-            <div class="dashboard-actions">
-              <button id="btn-knowledge-base" class="top-pill" type="button">Knowledge Base</button>
-              <button class="top-pill" type="button">Train Model</button>
-            </div>
           </div>
           <p class="subtitle">Generate ready-to-launch creative packages with rendered ads, previews, and export files.</p>
           <section class="engine-strip">
@@ -449,15 +445,20 @@
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
         <h2 style="margin: 0;">Knowledge Base</h2>
         <div style="margin-right: 32px;">
-          <input type="file" id="kb-upload-input" accept="image/*" style="display: none;">
-          <button class="top-pill" onclick="document.getElementById('kb-upload-input').click()">Upload Image</button>
+          <input type="file" id="kb-upload-input" accept="image/*" multiple style="display: none;">
+          <button class="top-pill" id="kb-upload-btn" onclick="document.getElementById('kb-upload-input').click()" style="display:none;">Upload Image</button>
         </div>
       </div>
-      <p style="color:var(--muted,#666);margin-bottom:12px;margin-top:0;">Select one or more images to use as sample context for generation.</p>
+      <div class="kb-tabs" style="display: flex; gap: 10px; margin-bottom: 12px; border-bottom: 1px solid var(--line, #27272a); padding-bottom: 8px;">
+        <button class="tab-btn active" data-kb-tab="generation" onclick="switchKbTab('generation')">Previous Generations</button>
+        <button class="tab-btn" data-kb-tab="asset" onclick="switchKbTab('asset')">Company Assets</button>
+        <button class="tab-btn" data-kb-tab="upload" onclick="switchKbTab('upload')">Uploaded Files</button>
+      </div>
+      <p id="kb-hint-text" style="color:var(--muted,#666);margin-bottom:12px;margin-top:0;">Select one or more images to use as sample context for generation.</p>
       <div id="kb-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;max-height:60vh;overflow:auto;padding:6px;"></div>
     </div>
   </div>
 
-  <script defer src="/app.js?v=20260527_1"></script>
+  <script defer src="/app.js?v=20260528_2"></script>
 </body>
 </html>
