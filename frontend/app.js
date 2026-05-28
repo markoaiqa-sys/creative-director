@@ -454,9 +454,9 @@ function toPublicAssetUrl(rawPath) {
 
 function showSupervisor() {
   if (supervisorPanel) supervisorPanel.classList.remove("hidden");
-  heroCard.classList.add("hidden");
-  loadingPanel.classList.add("hidden");
-  resultsPanel.classList.add("hidden");
+  if (heroCard) heroCard.classList.add("hidden");
+  if (loadingPanel) loadingPanel.classList.add("hidden");
+  if (resultsPanel) resultsPanel.classList.add("hidden");
   if (historyPanel) historyPanel.classList.add("hidden");
 
   if (supervisorNav) supervisorNav.classList.add("active");
@@ -468,45 +468,47 @@ function showSupervisor() {
 function showDashboard() {
   if (supervisorPanel) supervisorPanel.classList.add("hidden");
   if (supervisorNav) supervisorNav.classList.remove("active");
-  heroCard.classList.remove("hidden");
-  loadingPanel.classList.add("hidden");
+  if (heroCard) heroCard.classList.remove("hidden");
+  if (loadingPanel) loadingPanel.classList.add("hidden");
   // Only hide results if we haven't generated anything yet
-  if (!chatContext.campaign) {
-    resultsPanel.classList.add("hidden");
-  } else {
-    resultsPanel.classList.remove("hidden");
+  if (resultsPanel) {
+    if (!chatContext.campaign) {
+      resultsPanel.classList.add("hidden");
+    } else {
+      resultsPanel.classList.remove("hidden");
+    }
   }
   if (historyPanel) historyPanel.classList.add("hidden");
-  dashboardNav.classList.add("active");
+  if (dashboardNav) dashboardNav.classList.add("active");
   document.querySelectorAll(".specialist").forEach((n) => n.classList.remove("active"));
   if (navExecutionHistory) navExecutionHistory.classList.remove("active");
 }
 
 function showLoading() {
   if (supervisorPanel) supervisorPanel.classList.add("hidden");
-  heroCard.classList.add("hidden");
-  loadingPanel.classList.remove("hidden");
-  resultsPanel.classList.add("hidden");
+  if (heroCard) heroCard.classList.add("hidden");
+  if (loadingPanel) loadingPanel.classList.remove("hidden");
+  if (resultsPanel) resultsPanel.classList.add("hidden");
   if (historyPanel) historyPanel.classList.add("hidden");
 }
 
 function showResults() {
   if (supervisorPanel) supervisorPanel.classList.add("hidden");
-  heroCard.classList.add("hidden");
-  loadingPanel.classList.add("hidden");
-  resultsPanel.classList.remove("hidden");
+  if (heroCard) heroCard.classList.add("hidden");
+  if (loadingPanel) loadingPanel.classList.add("hidden");
+  if (resultsPanel) resultsPanel.classList.remove("hidden");
   if (historyPanel) historyPanel.classList.add("hidden");
 }
 
 function showHistory() {
   if (supervisorPanel) supervisorPanel.classList.add("hidden");
   if (supervisorNav) supervisorNav.classList.remove("active");
-  heroCard.classList.add("hidden");
-  loadingPanel.classList.add("hidden");
-  resultsPanel.classList.add("hidden");
+  if (heroCard) heroCard.classList.add("hidden");
+  if (loadingPanel) loadingPanel.classList.add("hidden");
+  if (resultsPanel) resultsPanel.classList.add("hidden");
   if (historyPanel) historyPanel.classList.remove("hidden");
 
-  dashboardNav.classList.remove("active");
+  if (dashboardNav) dashboardNav.classList.remove("active");
   document.querySelectorAll(".specialist").forEach((n) => n.classList.remove("active"));
   if (navExecutionHistory) navExecutionHistory.classList.add("active");
 }
@@ -518,7 +520,9 @@ function setCount(key, value) {
 }
 
 function empty(target, msg) {
-  target.innerHTML = `<div class="card"><p>${esc(msg)}</p></div>`;
+  if (target) {
+    target.innerHTML = `<div class="card"><p>${esc(msg)}</p></div>`;
+  }
 }
 
 function resetOutputs() {
@@ -3049,3 +3053,220 @@ if (kbUploadInput) {
   });
 }
 
+
+
+// ----------------------------------------------------------------------
+// NEW REELS SCRIPT DIRECTOR LOGIC
+// ----------------------------------------------------------------------
+
+function switchReelsDirectorTab(tabName) {
+  // Update Tab Buttons
+  document.querySelectorAll(".reels-director-tabs .tab-btn").forEach(btn => {
+    if (btn.dataset.reelsTab === tabName) {
+      btn.classList.add("active");
+    } else {
+      btn.classList.remove("active");
+    }
+  });
+
+  // Update Views
+  const views = ["analyze", "trends", "generate"];
+  views.forEach(v => {
+    const el = document.getElementById("reels-tab-" + v);
+    if (el) {
+      if (v === tabName) {
+        el.classList.remove("hidden");
+      } else {
+        el.classList.add("hidden");
+      }
+    }
+  });
+
+  // If opening trends tab for the first time, load defaults
+  if (tabName === "trends") {
+    generateDummyTrends();
+  }
+}
+
+// 5MB Upload Limit Helper
+function setupVideoUploadLimit(inputId, nameId) {
+  const input = document.getElementById(inputId);
+  const nameDisplay = document.getElementById(nameId);
+  if (input) {
+    input.addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        if (file.size > 5 * 1024 * 1024) {
+          nameDisplay.textContent = "Error: File exceeds 5MB limit. Please upload a smaller video.";
+          nameDisplay.style.color = "#ef4444";
+          input.value = ""; // Clear
+        } else {
+          nameDisplay.textContent = "Selected: " + file.name;
+          nameDisplay.style.color = "#10b981"; // Green
+        }
+      } else {
+        nameDisplay.textContent = "";
+      }
+    });
+  }
+}
+
+// Setup limiters on DOM load (or immediately if appended at end)
+setupVideoUploadLimit("reels-analyze-file", "reels-analyze-file-name");
+setupVideoUploadLimit("reels-gen-ref-file", "reels-gen-ref-file-name");
+
+function runReelsAnalyze() {
+  const btn = document.getElementById("btn-reels-analyze");
+  btn.textContent = "Analyzing...";
+  btn.disabled = true;
+  
+  // Simulate network delay
+  setTimeout(() => {
+    document.getElementById("reels-analyze-output").classList.remove("hidden");
+    btn.textContent = "Analyze Reel";
+    btn.disabled = false;
+  }, 1500);
+}
+
+function runReelsGenerate() {
+  const btn = document.getElementById("btn-reels-generate");
+  const ctx = document.getElementById("reels-gen-context").value || "Generic trending topic";
+  const duration = document.getElementById("reels-gen-duration").value;
+  const toneSelect = document.getElementById("reels-gen-style");
+  const tone = toneSelect ? toneSelect.options[toneSelect.selectedIndex].text : "Professional";
+  
+  btn.textContent = "Generating...";
+  btn.disabled = true;
+  
+  // Simulate network delay
+  setTimeout(() => {
+    document.getElementById("reels-generate-output").classList.remove("hidden");
+    document.getElementById("reels-out-title").textContent = "Generated Script (" + duration + ") - Tone: " + tone;
+    
+    let hookText = "'Stop scrolling! You are doing " + ctx + " completely wrong.'";
+    let body1Text = "'Most people think the secret is grinding harder, but actually...'";
+    let body2Text = "'...the real secret is leveraging this exact system I\\'ve been using for 5 years.'";
+    let ctaText = "'Comment \"SYSTEM\" below and I will DM you the exact blueprint.'";
+    
+    if (tone === "Friendly") {
+      hookText = "'Hey there! Are you struggling with " + ctx + "? Let\\'s fix that together.'";
+      body1Text = "'It\\'s super common to feel stuck, but the truth is actually quite simple...'";
+      body2Text = "'...I found this amazing approach that saved me hours of frustration, and I want to share it.'";
+      ctaText = "'Drop a comment with \"INFO\" and I\\'ll send the guide straight to your inbox!'";
+    } else if (tone === "Bold / Disruptive") {
+      hookText = "'Everything you\\'ve been told about " + ctx + " is a complete lie.'";
+      body1Text = "'The gurus are keeping you stuck in the old way to protect their own profits...'";
+      body2Text = "'...but today I\\'m breaking down the raw strategy that actually works in 2026.'";
+      ctaText = "'Comment \"REBEL\" below and I will DM you the uncensored playbook immediately.'";
+    } else if (tone === "Inspirational / Story-driven") {
+      hookText = "'I was ready to quit " + ctx + " until I discovered this one truth.'";
+      body1Text = "'For months, I got zero traction and felt like I was shouting into a void...'";
+      body2Text = "'...then I pivoted my entire framework, and everything shifted overnight.'";
+      ctaText = "'If you\\'re ready to make a shift, comment \"INSPIRE\" and let\\'s get started.'";
+    } else if (tone === "Urgent / Scarcity-driven") {
+      hookText = "'If you don\\'t fix your " + ctx + " in the next 24 hours, you\\'re going to lose out.'";
+      body1Text = "'The market is shifting rapidly, and late adopters are getting left behind...'";
+      body2Text = "'...this is the exact system that successful creators are scaling right now.'";
+      ctaText = "'Comment \"NOW\" to get instant access before the blueprint goes offline.'";
+    } else if (tone === "Conversational / Casual") {
+      hookText = "'So, let\\'s talk about " + ctx + " for a second.'";
+      body1Text = "'Honestly, it\\'s not as complicated as everyone makes it out to be...'";
+      body2Text = "'...here is the simple process I use every single day to get results.'";
+      ctaText = "'Shoot me a DM or comment \"CHAT\" and let\\'s talk about how to apply it.'";
+    } else if (tone === "Direct / Promotional") {
+      hookText = "'Here is the fastest way to scale your " + ctx + " starting today.'";
+      body1Text = "'We built a battle-tested framework specifically designed to solve this exact bottleneck...'";
+      body2Text = "'...delivering predictable, high-converting results with minimal overhead.'";
+      ctaText = "'Click the link in bio or comment \"SCALE\" to download the framework now.'";
+    } else if (tone === "Informative / Educational") {
+      hookText = "'Here is the step-by-step breakdown of how " + ctx + " actually works.'";
+      body1Text = "'Let\\'s first dissect the core components and variables driving the system...'";
+      body2Text = "'...by analyzing the input/output ratios, we can optimize the workflow for maximum output.'";
+      ctaText = "'Save this post for later and comment \"GUIDE\" for the full technical documentation.'";
+    }
+    
+    document.getElementById("reels-out-script").textContent = 
+      "Title: 3 SECRETS to Mastering " + ctx + "\n" +
+      "Tone: " + tone + "\n\n" +
+      "[0:00 - 0:03] HOOK: Visual: Fast zoom in on face. Audio: " + hookText + "\n\n" +
+      "[0:03 - 0:10] BODY 1: Visual: B-Roll showing frustration. Audio: " + body1Text + "\n\n" +
+      "[0:10 - 0:20] BODY 2: Visual: Screen recording or chart. Audio: " + body2Text + "\n\n" +
+      "[0:20 - 0:25] CTA: Visual: Pointing to comments. Audio: " + ctaText + "\n\n" +
+      "Hashtags: #" + ctx.toLowerCase().replace(/[^a-z0-9]/g, "") + " #viral #strategy";
+    
+    btn.textContent = "Generate Script";
+    btn.disabled = false;
+  }, 2000);
+}
+
+function generateDummyTrends() {
+  const category = document.getElementById("reels-trends-category").value;
+  const grid = document.getElementById("reels-trends-grid");
+  const hash = document.getElementById("reels-trends-hashtags");
+  const audio = document.getElementById("reels-trends-audio");
+  
+  if (!grid) return;
+  
+  // Mock Data
+  const thumbnails = [
+    "https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=300&q=80",
+    "https://images.unsplash.com/photo-1516259762381-22954d7d3ad2?w=300&q=80",
+    "https://images.unsplash.com/photo-1542204165-65bf26472b9b?w=300&q=80",
+    "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=300&q=80",
+    "https://images.unsplash.com/photo-1533227260828-53134ce46eba?w=300&q=80"
+  ];
+  
+  let html = "";
+  for(let i=0; i<5; i++) {
+    const views = Math.floor(Math.random() * 500) + 10;
+    const likes = Math.floor(views * 0.1);
+    const shares = Math.floor(views * 0.05);
+    html += `
+      <div class="card" style="display: flex; gap: 12px; padding: 12px; background: #111114; align-items: center; cursor: pointer;">
+        <img src="${thumbnails[i]}" style="width: 60px; height: 100px; object-fit: cover; border-radius: 6px; flex-shrink: 0;" alt="Reel">
+        <div>
+          <h4 style="margin: 0 0 4px 0; color: #fff;">Viral Pattern #${i+1}</h4>
+          <p style="margin: 0 0 8px 0; font-size: 0.85rem; color: #a1a1aa;">Excellent retention in first 3s.</p>
+          <div style="display: flex; gap: 12px; font-size: 0.8rem; color: #71717a;">
+            <span>👁 ${views}K</span>
+            <span>❤ ${likes}K</span>
+            <span>↗ ${shares}K</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+  grid.innerHTML = html;
+  
+  hash.innerHTML = `
+    <span class="top-pill">#${category}</span>
+    <span class="top-pill">#${category}tips</span>
+    <span class="top-pill">#viral</span>
+    <span class="top-pill">#trending</span>
+    <span class="top-pill">#growth</span>
+  `;
+  
+  audio.innerHTML = `
+    1. "${category.toUpperCase()} Motivation Type Beat" - 2.5M Uses ⬆<br><br>
+    2. "Trending Voiceover #42" - 1.1M Uses ⬆<br><br>
+    3. "Chill Vibes 2024" - 800K Uses ➖
+  `;
+}
+
+// Expose functions globally for inline HTML click handlers
+window.showDashboard = showDashboard;
+window.switchReelsDirectorTab = switchReelsDirectorTab;
+window.runReelsAnalyze = runReelsAnalyze;
+window.generateDummyTrends = generateDummyTrends;
+window.runReelsGenerate = runReelsGenerate;
+window.closeImageModal = closeImageModal;
+window.closeKbModal = closeKbModal;
+window.switchKbTab = switchKbTab;
+window.openKbModal = openKbModal;
+window.openImageModal = openImageModal;
+window.deleteKbImage = deleteKbImage;
+window.useKnowledgeImage = useKnowledgeImage;
+window.toggleCampaign = toggleCampaign;
+window.removeUploadedSample = removeUploadedSample;
+window.removeKnowledgeImage = removeKnowledgeImage;
+window.selectKBItem = selectKBItem;

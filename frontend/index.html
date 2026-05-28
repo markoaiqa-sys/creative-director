@@ -183,154 +183,166 @@
           <section id="tab-copy" class="output-tab hidden"><div class="section-title">Generated Ad Copy <span id="copy-count-large">0</span></div><div id="copy-output" class="stack"></div></section>
           <section id="tab-concepts" class="output-tab hidden"><div class="section-title">Generated Concepts <span id="concepts-count-large">0</span></div><div id="concepts-output" class="stack"></div></section>
           <section id="tab-reels" class="output-tab hidden">
-            <div class="section-title">Instagram Viral Reel Intelligence <span id="reels-count-large">0</span></div>
-            <section class="reels-hero-card">
-              <div class="reels-hero-copy">
-                <p class="reels-hero-kicker">AI Reel Strategist</p>
-                <h2>Instagram Viral Reel Intelligence</h2>
-                <p>Analyze viral reels, detect winning hook patterns, compare competitors, predict retention, and generate cinematic reel scripts.</p>
-              </div>
-            </section>
+            <div class="section-title">Reels Script Director</div>
+            
+            <div class="kb-tabs reels-director-tabs" style="display: flex; gap: 10px; margin-bottom: 24px; border-bottom: 1px solid var(--line, #27272a); padding-bottom: 8px;">
+              <button class="tab-btn active" data-reels-tab="analyze" onclick="switchReelsDirectorTab('analyze')">Analyze Reels</button>
+              <button class="tab-btn" data-reels-tab="trends" onclick="switchReelsDirectorTab('trends')">Discover Trends</button>
+              <button class="tab-btn" data-reels-tab="generate" onclick="switchReelsDirectorTab('generate')">Generate your own script</button>
+            </div>
 
-            <div id="instagram-ingestion-panel" class="instagram-ingestion-panel">
-              <div class="reels-guided-grid">
+            <!-- ANALYZE REELS TAB -->
+            <div id="reels-tab-analyze" class="reels-director-view">
+              <div class="reels-guided-grid" style="margin-bottom: 16px;">
                 <label class="field span-2 reels-hero-field">
                   <span>Paste Reel URL</span>
-                  <textarea id="instagram-ingest-reel-urls" placeholder="Paste one or more Instagram Reel URLs"></textarea>
+                  <textarea id="reels-analyze-url" placeholder="Paste an Instagram Reel URL here..."></textarea>
                 </label>
                 <label class="field span-2 reels-hero-field">
-                  <span>What should we create from this?</span>
-                  <textarea id="instagram-brief" placeholder="Example: Build a 30-second reel for founders, optimized for saves and comments, with a sharp contrarian hook."></textarea>
+                  <span>Or Upload Reel Video (Max 5MB)</span>
+                  <input type="file" id="reels-analyze-file" accept="video/mp4,video/quicktime,video/webm" style="padding: 10px; background: #111114; border: 1px solid #27272a; border-radius: 8px; color: #fff; width: 100%;">
+                  <div id="reels-analyze-file-name" style="margin-top: 8px; font-size: 0.85rem; color: #ef4444;"></div>
+                </label>
+              </div>
+              <div class="reels-hero-actions" style="margin-bottom: 24px; display: flex; justify-content: center;">
+                <button id="btn-reels-analyze" class="primary-btn" type="button" onclick="runReelsAnalyze()">Analyze Reel</button>
+              </div>
+              
+              <!-- Analyze Output -->
+              <div id="reels-analyze-output" class="hidden stack">
+                <div class="instagram-ingestion-status" style="margin-bottom: 16px;">
+                  <div class="instagram-ingestion-status-row">
+                    <strong>Analysis Complete</strong>
+                    <span>Visual dashboards & hook breakdowns generated.</span>
+                  </div>
+                </div>
+                <div class="card" style="padding: 16px;">
+                  <h3 style="margin-top:0;">Reel Breakdown</h3>
+                  <div style="display: flex; gap: 16px; margin-top: 12px; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 200px; padding: 12px; background: #111114; border-radius: 8px; border: 1px solid #27272a;">
+                      <strong>Opening Line (0-2s)</strong>
+                      <p style="color: #a1a1aa; font-style: italic; margin: 4px 0 0 0;">"Stop doing this one thing if you want to grow..."</p>
+                    </div>
+                    <div style="flex: 1; min-width: 200px; padding: 12px; background: #111114; border-radius: 8px; border: 1px solid #27272a;">
+                      <strong>Visual Hook</strong>
+                      <p style="color: #a1a1aa; margin: 4px 0 0 0;">Fast motion pointing at screen, bold yellow text overlay.</p>
+                    </div>
+                  </div>
+                  <h4 style="margin-top: 16px; margin-bottom: 8px;">Timeline Captions</h4>
+                  <ul style="list-style: none; padding: 0; margin: 0; color: #a1a1aa; font-size: 0.9rem;">
+                    <li style="margin-bottom: 4px;"><strong style="color: #fff;">0:00</strong> Stop doing this one thing</li>
+                    <li style="margin-bottom: 4px;"><strong style="color: #fff;">0:02</strong> If you want to grow on Instagram</li>
+                    <li style="margin-bottom: 4px;"><strong style="color: #fff;">0:05</strong> The algorithm completely changed today</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            <!-- DISCOVER TRENDS TAB -->
+            <div id="reels-tab-trends" class="reels-director-view hidden">
+              <label class="field" style="max-width: 300px; margin-bottom: 24px;">
+                <span>Select Category</span>
+                <select id="reels-trends-category" onchange="generateDummyTrends()">
+                  <option value="fitness">Fitness & Health</option>
+                  <option value="saas">SaaS & Tech</option>
+                  <option value="ecommerce">E-commerce</option>
+                  <option value="realestate">Real Estate</option>
+                  <option value="fashion">Fashion & Style</option>
+                  <option value="travel">Travel</option>
+                  <option value="finance">Finance & Crypto</option>
+                  <option value="education">Education & Coaching</option>
+                  <option value="entertainment">Entertainment</option>
+                  <option value="food">Food & Cooking</option>
+                </select>
+              </label>
+              
+              <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px;">
+                <div>
+                  <h3 style="margin-top: 0; margin-bottom: 12px;">Top Trending Reels</h3>
+                  <div id="reels-trends-grid" style="display: flex; flex-direction: column; gap: 12px;">
+                    <!-- Populated by JS -->
+                  </div>
+                </div>
+                <div>
+                  <div class="card" style="padding: 16px; background: #111114;">
+                    <h3 style="margin-top: 0; margin-bottom: 12px;">Trending Hashtags</h3>
+                    <div id="reels-trends-hashtags" style="display: flex; flex-wrap: wrap; gap: 8px;">
+                      <!-- Populated by JS -->
+                    </div>
+                    <h3 style="margin-top: 24px; margin-bottom: 12px;">Trending Audio</h3>
+                    <div id="reels-trends-audio" style="color: #a1a1aa; font-size: 0.9rem;">
+                      <!-- Populated by JS -->
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- GENERATE SCRIPT TAB -->
+            <div id="reels-tab-generate" class="reels-director-view hidden">
+              <div class="reels-guided-grid" style="margin-bottom: 16px;">
+                <label class="field">
+                  <span>Reel Duration</span>
+                  <select id="reels-gen-duration">
+                    <option value="15s">15 seconds (Short & Punchy)</option>
+                    <option value="30s" selected>30 seconds (Standard)</option>
+                    <option value="60s">60 seconds (Deep Dive)</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Style / Tone</span>
+                  <select id="reels-gen-style">
+                    <option value="professional">Professional</option>
+                    <option value="friendly">Friendly</option>
+                    <option value="conversational">Conversational / Casual</option>
+                    <option value="bold">Bold / Disruptive</option>
+                    <option value="inspirational">Inspirational / Story-driven</option>
+                    <option value="educational">Informative / Educational</option>
+                    <option value="direct">Direct / Promotional</option>
+                    <option value="urgent">Urgent / Scarcity-driven</option>
+                  </select>
+                </label>
+                <label class="field span-2">
+                  <span>Script Context & Information</span>
+                  <textarea id="reels-gen-context" placeholder="What is this reel about? E.g., Explain why cold email is dead and inbound marketing is the future."></textarea>
                 </label>
               </div>
 
-              <div class="instagram-ingestion-options">
-                <label class="toggle-pill"><input id="instagram-single-reel-mode" type="checkbox"><span>Single Reel Deep Analysis</span></label>
-              </div>
-
-              <div class="reels-secondary-sources hidden" id="instagram-single-reel-fields">
-                <div class="instagram-ingestion-grid">
+              <div class="card" style="padding: 16px; background: #111114; border: 1px solid #27272a; margin-bottom: 24px;">
+                <h3 style="margin-top: 0; margin-bottom: 12px;">Reference Material (Optional)</h3>
+                <div class="reels-guided-grid">
                   <label class="field span-2">
-                    <span>Transcript (recommended for 1 reel)</span>
-                    <textarea id="instagram-single-transcript" placeholder="Paste spoken lines or transcript from the reel"></textarea>
+                    <span>Paste Reference Reel URL</span>
+                    <input type="text" id="reels-gen-ref-url" placeholder="https://instagram.com/reel/..." style="width: 100%; padding: 10px; background: #18181b; border: 1px solid #27272a; border-radius: 8px; color: #fff;">
                   </label>
                   <label class="field span-2">
-                    <span>Caption text</span>
-                    <textarea id="instagram-single-caption" placeholder="Paste the reel caption to improve hook and CTA analysis"></textarea>
-                  </label>
-                  <label class="field span-2">
-                    <span>Opening hook line (0-2s)</span>
-                    <input id="instagram-single-hook" type="text" placeholder="Example: Nobody tells you this about Instagram growth">
-                  </label>
-                  <label class="field">
-                    <span>Views (optional)</span>
-                    <input id="instagram-single-views" type="number" min="0" placeholder="120000">
-                  </label>
-                  <label class="field">
-                    <span>Likes (optional)</span>
-                    <input id="instagram-single-likes" type="number" min="0" placeholder="5600">
-                  </label>
-                  <label class="field">
-                    <span>Comments (optional)</span>
-                    <input id="instagram-single-comments" type="number" min="0" placeholder="420">
-                  </label>
-                  <label class="field">
-                    <span>Shares (optional)</span>
-                    <input id="instagram-single-shares" type="number" min="0" placeholder="310">
+                    <span>Or Upload Reference Video (Max 5MB)</span>
+                    <input type="file" id="reels-gen-ref-file" accept="video/mp4,video/quicktime,video/webm" style="padding: 10px; background: #111114; border: 1px solid #27272a; border-radius: 8px; color: #fff; width: 100%;">
+                    <div id="reels-gen-ref-file-name" style="margin-top: 8px; font-size: 0.85rem; color: #ef4444;"></div>
                   </label>
                 </div>
               </div>
 
-              <div class="reels-hero-actions">
-                <button id="instagram-ingest-submit" class="primary-btn" type="button">Analyze Reel</button>
-                <button id="instagram-add-competitors" class="top-pill" type="button">Upload Competitor Reels</button>
-                <button id="instagram-run-trends" class="top-pill" type="button">Discover Trends</button>
+              <div class="reels-hero-actions" style="margin-bottom: 24px; display: flex; justify-content: center;">
+                <button id="btn-reels-generate" class="primary-btn" type="button" onclick="runReelsGenerate()">Generate Script</button>
               </div>
-
-              <div class="reels-secondary-sources hidden" id="instagram-secondary-sources">
-                <div class="instagram-ingestion-grid">
-                  <label class="field span-2">
-                    <span>Competitor reel URLs</span>
-                    <textarea id="instagram-ingest-competitor-reels" placeholder="Optional. Paste competitor reel URLs to compare winning formulas."></textarea>
-                  </label>
-                  <label class="field span-2">
-                    <span>Instagram usernames</span>
-                    <textarea id="instagram-ingest-usernames" placeholder="Optional. Add competitor usernames for broader scanning."></textarea>
-                  </label>
-                  <label class="field span-2">
-                    <span>Trend sample reels</span>
-                    <textarea id="instagram-ingest-trending-reels" placeholder="Optional. Paste trend reels to compare rising formats."></textarea>
-                  </label>
-                  <label class="field">
-                    <span>Niche</span>
-                    <input id="instagram-ingest-niche" type="text" placeholder="fitness, beauty, SaaS...">
-                  </label>
-                  <label class="field">
-                    <span>Audience</span>
-                    <input id="instagram-ingest-audience" type="text" placeholder="founders, creators, buyers...">
-                  </label>
+              
+              <!-- Generate Output -->
+              <div id="reels-generate-output" class="hidden stack">
+                <div class="instagram-ingestion-status" style="margin-bottom: 16px;">
+                  <div class="instagram-ingestion-status-row">
+                    <strong>Script Generated successfully</strong>
+                    <span>Ready for production.</span>
+                  </div>
+                </div>
+                <div class="card" style="padding: 20px;">
+                  <h2 id="reels-out-title" style="margin-top: 0; margin-bottom: 16px;"></h2>
+                  <div id="reels-out-script" style="white-space: pre-wrap; font-family: monospace; color: #d4d4d8; font-size: 0.95rem; line-height: 1.6;"></div>
                 </div>
               </div>
-
-              <details class="reels-advanced-panel">
-                <summary>Advanced source settings</summary>
-                <div class="instagram-ingestion-grid">
-                  <label class="field">
-                    <span>Job name</span>
-                    <input id="instagram-ingest-job-name" type="text" placeholder="Weekly competitor ingest">
-                  </label>
-                  <label class="field">
-                    <span>Max reels</span>
-                    <input id="instagram-ingest-max-reels" type="number" min="1" max="100" value="20">
-                  </label>
-                  <label class="field">
-                    <span>Cache TTL (sec)</span>
-                    <input id="instagram-ingest-cache-ttl" type="number" min="0" max="86400" value="1800">
-                  </label>
-                  <label class="field">
-                    <span>Rate limit / minute</span>
-                    <input id="instagram-ingest-rate-limit" type="number" min="1" max="120" value="30">
-                  </label>
-                </div>
-                <div class="instagram-ingestion-options">
-                  <label class="toggle-pill"><input id="instagram-ingest-include-comments" type="checkbox" checked><span>Include comments</span></label>
-                  <label class="toggle-pill"><input id="instagram-ingest-include-metrics" type="checkbox" checked><span>Include metrics</span></label>
-                  <label class="toggle-pill"><input id="instagram-ingest-force-refresh" type="checkbox"><span>Force refresh</span></label>
-                  <button id="instagram-ingest-reset" class="top-pill" type="button">Reset</button>
-                </div>
-              </details>
-
-              <div class="reels-pipeline-strip" id="instagram-pipeline-strip">
-                <div class="reels-pipeline-step" data-stage="ingest">Ingest</div>
-                <div class="reels-pipeline-step" data-stage="analyze">Analyze</div>
-                <div class="reels-pipeline-step" data-stage="trends">Trends</div>
-                <div class="reels-pipeline-step" data-stage="script">Script</div>
-                <div class="reels-pipeline-step" data-stage="direct">Direct</div>
-              </div>
-
-              <div class="instagram-ingestion-status">
-                <div class="instagram-ingestion-status-row">
-                  <strong id="instagram-ingest-state">Idle</strong>
-                  <span id="instagram-ingest-job-id">Awaiting reel source</span>
-                </div>
-                <div class="instagram-ingest-progress-track">
-                  <span id="instagram-ingest-progress-fill" class="instagram-ingest-progress-fill" style="width:0%"></span>
-                </div>
-                <div id="instagram-ingest-message" class="mono">Paste a reel URL and we will ingest, analyze, detect trends, and generate direction automatically.</div>
-              </div>
-
-              <div class="reels-manual-toolbar">
-                <span>Manual reruns</span>
-                <button id="instagram-run-analyze" class="top-pill" type="button">Analyze</button>
-                <button id="instagram-run-script" class="top-pill" type="button">Script</button>
-                <button id="instagram-run-direct" class="top-pill" type="button">Direct</button>
-                <button id="instagram-run-score" class="top-pill" type="button">Score</button>
-              </div>
-
-              <div id="instagram-ingest-result" class="instagram-ingestion-result"></div>
             </div>
-            <div id="reels-output" class="stack"></div>
-          </section>
+
+</section>
           <section id="tab-exports" class="output-tab hidden"><div class="section-title">Export Package <span id="exports-count-large">0</span></div><div id="exports-output" class="stack"></div></section>
         </section>
         <section class="history-card hidden" id="history-panel">
@@ -459,6 +471,6 @@
     </div>
   </div>
 
-  <script defer src="/app.js?v=20260528_2"></script>
+  <script defer src="/app.js?v=20260528_6"></script>
 </body>
 </html>
