@@ -10,6 +10,92 @@ router = APIRouter()
 log = logging.getLogger("chat")
 
 
+async def call_groq_with_fallback(
+    settings,
+    messages: list[dict],
+    max_tokens: int = 512,
+    temperature: float = 0.7,
+    response_format: dict | None = None,
+    log_prefix: str = "[CHAT]"
+) -> tuple[str | None, bool, list[str]]:
+    """
+    Attempts to call Groq, looping through primary and fallback models.
+    Retries on 429 (rate limit) with exponential backoff.
+    Returns: (reply_text, hit_rate_limit, error_messages)
+    """
+    import asyncio
+    primary_model = settings.groq_model
+    fallback_models = [
+        model.strip()
+        for model in settings.groq_fallback_models.split(",")
+        if model.strip() and model.strip() != primary_model
+    ]
+    models = [primary_model] + fallback_models
+    
+    max_retries = getattr(settings, "groq_max_retries", 2)
+    base_delay = getattr(settings, "groq_retry_base_delay_seconds", 1.5)
+    
+    error_msgs = []
+    hit_rate_limit = False
+    
+    async with httpx.AsyncClient(timeout=settings.groq_timeout_seconds) as client:
+        for model_name in models:
+            for attempt in range(max_retries + 1):
+                try:
+                    payload = {
+                        "model": model_name,
+                        "messages": messages,
+                        "max_tokens": max_tokens,
+                        "temperature": temperature,
+                    }
+                    if response_format:
+                        payload["response_format"] = response_format
+                        
+                    response = await client.post(
+                        f"{settings.groq_base_url}/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {settings.groq_api_key}",
+                            "Content-Type": "application/json",
+                        },
+                        json=payload,
+                    )
+                    
+                    if response.status_code == 429:
+                        hit_rate_limit = True
+                        wait_secs = base_delay * (2 ** attempt)
+                        log.warning(
+                            f"{log_prefix} Model {model_name} rate limited (429) on attempt {attempt+1}/{max_retries+1}. "
+                            f"{'Retrying in ' + f'{wait_secs:.1f}' + 's' if attempt < max_retries else 'Moving to next model/provider'}"
+                        )
+                        error_msgs.append(f"Groq {model_name}: rate limited (429)")
+                        if attempt < max_retries:
+                            await asyncio.sleep(wait_secs)
+                            continue
+                        else:
+                            break  # Try next model
+                            
+                    response.raise_for_status()
+                    data = response.json()
+                    reply = data["choices"][0]["message"]["content"].strip()
+                    log.info(f"{log_prefix} Groq model {model_name} responded OK")
+                    return reply, False, error_msgs
+                    
+                except httpx.HTTPStatusError as exc:
+                    status_code = exc.response.status_code
+                    detail = exc.response.text[:200]
+                    log.warning(f"{log_prefix} Groq model {model_name} failed with status {status_code}: {detail}")
+                    error_msgs.append(f"Groq {model_name} HTTP {status_code}: {detail}")
+                    break  # Break attempt loop, try next model
+                except Exception as exc:
+                    log.warning(f"{log_prefix} Groq model {model_name} failed: {exc}")
+                    error_msgs.append(f"Groq {model_name} error: {exc}")
+                    break  # Break attempt loop, try next model
+                    
+    return None, hit_rate_limit, error_msgs
+
+
+
+
 class ChatRequest(BaseModel):
     message: str
     context: dict | None = None
@@ -109,38 +195,26 @@ Rules:
 
     # --- Try Groq first ---
     if settings.groq_api_key:
-        try:
-            async with httpx.AsyncClient(timeout=settings.groq_timeout_seconds) as client:
-                response = await client.post(
-                    f"{settings.groq_base_url}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {settings.groq_api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json={
-                        "model": settings.groq_model,
-                        "messages": messages,
-                        "max_tokens": 512,
-                        "temperature": 0.7,
-                    },
-                )
-                if response.status_code == 429:
-                    hit_rate_limit = True
-                    log.warning("[CHAT] Groq returned 429 Too Many Requests — will try Gemini")
-                    error_msgs.append("Groq: rate limited (429)")
-                else:
-                    response.raise_for_status()
-                    data = response.json()
-                    reply = data["choices"][0]["message"]["content"].strip()
-                    log.info("[CHAT] Groq responded OK")
-        except Exception as exc:
-            log.warning(f"[CHAT] Groq failed: {exc}")
-            error_msgs.append(f"Groq error: {exc}")
+        reply, hit_rate_limit, groq_errors = await call_groq_with_fallback(
+            settings=settings,
+            messages=messages,
+            max_tokens=512,
+            temperature=0.7,
+            log_prefix="[CHAT]"
+        )
+        if groq_errors:
+            error_msgs.extend(groq_errors)
     else:
         log.warning("[CHAT] groq_api_key not configured — skipping Groq")
 
+
+
     # --- Fall back to Gemini with retry on 429 ---
-    if not reply and settings.gemini_api_key:
+    from app.providers.groq_llm import custom_gemini_key_var
+    custom_gemini = custom_gemini_key_var.get()
+    gemini_key = custom_gemini if custom_gemini else settings.gemini_api_key
+
+    if not reply and gemini_key:
         max_attempts = 2
         for attempt in range(max_attempts):
             try:
@@ -171,7 +245,7 @@ Rules:
                     response = await client.post(
                         url,
                         headers={"Content-Type": "application/json"},
-                        params={"key": settings.gemini_api_key},
+                        params={"key": gemini_key},
                         json=payload
                     )
 
@@ -514,34 +588,24 @@ async def chat_generate(
 
     # --- Try Groq first ---
     if settings.groq_api_key:
-        try:
-            async with httpx.AsyncClient(timeout=settings.groq_timeout_seconds) as client:
-                response = await client.post(
-                    f"{settings.groq_base_url}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {settings.groq_api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json={
-                        "model": settings.groq_model,
-                        "messages": messages,
-                        "max_tokens": 1024,
-                        "temperature": 0.3,
-                        "response_format": {"type": "json_object"},
-                    },
-                )
-                if response.status_code != 429:
-                    response.raise_for_status()
-                    data = response.json()
-                    reply_text = data["choices"][0]["message"]["content"].strip()
-                    log.info("[CHAT-GEN] Groq responded OK")
-                else:
-                    log.warning("[CHAT-GEN] Groq 429, trying Gemini")
-        except Exception as exc:
-            log.warning(f"[CHAT-GEN] Groq failed: {exc}")
+        reply_text, hit_rate_limit, groq_errors = await call_groq_with_fallback(
+            settings=settings,
+            messages=messages,
+            max_tokens=1024,
+            temperature=0.3,
+            response_format={"type": "json_object"},
+            log_prefix="[CHAT-GEN]"
+        )
+        reply_text = reply_text or ""
+
+
 
     # --- Fall back to Gemini ---
-    if not reply_text and settings.gemini_api_key:
+    from app.providers.groq_llm import custom_gemini_key_var
+    custom_gemini = custom_gemini_key_var.get()
+    gemini_key = custom_gemini if custom_gemini else settings.gemini_api_key
+
+    if not reply_text and gemini_key:
         try:
             gemini_messages = []
             system_instruction = ""
@@ -569,7 +633,7 @@ async def chat_generate(
                 response = await client.post(
                     url,
                     headers={"Content-Type": "application/json"},
-                    params={"key": settings.gemini_api_key},
+                    params={"key": gemini_key},
                     json=payload,
                 )
                 response.raise_for_status()

@@ -15,13 +15,23 @@ window.fetch = async function () {
   
   const authEmail = localStorage.getItem("auth_email");
   const isGuest = localStorage.getItem("is_guest");
+  const customProvider = localStorage.getItem("custom_provider") || "default";
+  const customApiKey = localStorage.getItem("custom_api_key");
   
   if (config.headers instanceof Headers) {
     if (authEmail) config.headers.append("X-Client-Email", authEmail);
     if (isGuest) config.headers.append("X-Is-Guest", isGuest);
+    if (customProvider !== "default" && customApiKey && customApiKey.trim()) {
+      const headerName = customProvider === "groq" ? "X-Custom-Groq-Key" : "X-Custom-Gemini-Key";
+      config.headers.append(headerName, customApiKey.trim());
+    }
   } else {
     if (authEmail) config.headers["X-Client-Email"] = authEmail;
     if (isGuest) config.headers["X-Is-Guest"] = isGuest;
+    if (customProvider !== "default" && customApiKey && customApiKey.trim()) {
+      const headerName = customProvider === "groq" ? "X-Custom-Groq-Key" : "X-Custom-Gemini-Key";
+      config.headers[headerName] = customApiKey.trim();
+    }
   }
   
   return originalFetch.call(window, resource, config);
@@ -38,6 +48,79 @@ document.addEventListener("DOMContentLoaded", () => {
   } else {
     overlay.style.display = "none";
   }
+
+  // --- Model Settings Panel Logic ---
+  const btnChatSettings = document.getElementById("btn-chat-settings");
+  const btnChatSettingsClose = document.getElementById("btn-chat-settings-close");
+  const chatSettingsPanel = document.getElementById("chat-settings-panel");
+  const chatProviderSelect = document.getElementById("chat-provider-select");
+  const chatCustomApiKey = document.getElementById("chat-custom-api-key");
+  const chatCustomKeyWrapper = document.getElementById("chat-custom-key-wrapper");
+  const btnChatSettingsSave = document.getElementById("btn-chat-settings-save");
+
+  // Load initial state
+  if (chatProviderSelect && chatCustomApiKey && chatCustomKeyWrapper) {
+    const savedProvider = localStorage.getItem("custom_provider") || "default";
+    const savedKey = localStorage.getItem("custom_api_key") || "";
+    
+    chatProviderSelect.value = savedProvider;
+    chatCustomApiKey.value = savedKey;
+    
+    if (savedProvider !== "default") {
+      chatCustomKeyWrapper.classList.remove("hidden");
+    } else {
+      chatCustomKeyWrapper.classList.add("hidden");
+    }
+    
+    // Toggle input visibility
+    chatProviderSelect.addEventListener("change", () => {
+      if (chatProviderSelect.value !== "default") {
+        chatCustomKeyWrapper.classList.remove("hidden");
+      } else {
+        chatCustomKeyWrapper.classList.add("hidden");
+      }
+    });
+  }
+
+  // Toggle settings panel
+  if (btnChatSettings && chatSettingsPanel) {
+    btnChatSettings.addEventListener("click", (e) => {
+      e.stopPropagation();
+      // Close other panels if open
+      const historyPanel = document.getElementById("chat-history-panel");
+      if (historyPanel) historyPanel.classList.add("hidden");
+      
+      chatSettingsPanel.classList.toggle("hidden");
+    });
+  }
+
+  if (btnChatSettingsClose && chatSettingsPanel) {
+    btnChatSettingsClose.addEventListener("click", () => {
+      chatSettingsPanel.classList.add("hidden");
+    });
+  }
+
+  // Save changes
+  if (btnChatSettingsSave && chatProviderSelect && chatCustomApiKey) {
+    btnChatSettingsSave.addEventListener("click", () => {
+      const providerVal = chatProviderSelect.value;
+      const keyVal = chatCustomApiKey.value.trim();
+      
+      localStorage.setItem("custom_provider", providerVal);
+      localStorage.setItem("custom_api_key", keyVal);
+      
+      if (chatSettingsPanel) chatSettingsPanel.classList.add("hidden");
+      
+      alert("Model settings saved successfully!");
+    });
+  }
+
+  // Close panels when clicking outside
+  document.addEventListener("click", (e) => {
+    if (chatSettingsPanel && !chatSettingsPanel.classList.contains("hidden") && !chatSettingsPanel.contains(e.target) && e.target !== btnChatSettings) {
+      chatSettingsPanel.classList.add("hidden");
+    }
+  });
 
   // Fetch ui-config to set up Google Auth
   fetch(API_BASE_URL + "/ui-config")

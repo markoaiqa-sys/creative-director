@@ -642,6 +642,7 @@
           </div>
         </div>
         <div class="chat-actions">
+          <button class="icon-btn" type="button" aria-label="Settings" id="btn-chat-settings" title="Manage Models">⚙</button>
           <button class="icon-btn" type="button" aria-label="Add" id="btn-chat-new">+</button>
           <button class="icon-btn" type="button" aria-label="History" id="btn-chat-history">◷</button>
           <button class="icon-btn" type="button" aria-label="Close" id="btn-chat-close">✕</button>
@@ -670,6 +671,35 @@
           <button id="btn-chat-history-close" style="background: none; border: none; color: #a1a1aa; cursor: pointer; font-size: 16px; padding: 2px 6px; line-height: 1; transition: color 0.2s;" onmouseover="this.style.color='#ffffff'" onmouseout="this.style.color='#a1a1aa'" title="Close">✕</button>
         </div>
         <div id="chat-sessions-list"></div>
+      </div>
+
+      <div id="chat-settings-panel" class="hidden" style="position: absolute; top: 60px; right: 10px; width: 280px; background: #18181b; border: 1px solid #27272a; border-radius: 12px; z-index: 101; max-height: 400px; overflow-y: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.5); padding: 16px; display: flex; flex-direction: column; gap: 14px;">
+        <div style="font-weight: 700; font-size: 0.95rem; color: #ffffff; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #27272a; padding-bottom: 10px; margin-bottom: 4px;">
+          <span style="display: flex; align-items: center; gap: 8px;">⚙ Manage Models</span>
+          <button id="btn-chat-settings-close" style="background: none; border: none; color: #a1a1aa; cursor: pointer; font-size: 16px; padding: 2px 6px;" title="Close">✕</button>
+        </div>
+        
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <label style="font-size: 0.8rem; font-weight: 600; color: #e4e4e7;">Select API Provider</label>
+            <select id="chat-provider-select" style="width: 100%; padding: 8px 10px; font-size: 0.85rem; background: #09090b; border: 1px solid #27272a; border-radius: 6px; color: #fff; cursor: pointer; border-color: #27272a;">
+              <option value="default" selected>Default (Server Managed)</option>
+              <option value="groq">Groq Cloud (Llama models)</option>
+              <option value="gemini">Google Gemini (Gemini Pro/Flash)</option>
+            </select>
+          </div>
+          
+          <div id="chat-custom-key-wrapper" class="hidden" style="display: flex; flex-direction: column; gap: 6px;">
+            <label style="font-size: 0.8rem; font-weight: 600; color: #e4e4e7;">Your Personal API Key</label>
+            <input type="password" id="chat-custom-api-key" placeholder="Enter your key..." style="width: 100%; padding: 8px 10px; font-size: 0.85rem; background: #09090b; border: 1px solid #27272a; border-radius: 6px; color: #fff;">
+          </div>
+          
+          <small style="font-size: 0.72rem; color: #71717a; line-height: 1.4;">
+            Providing a custom API key allows you to execute operations under your personal limits. Select <strong>Default</strong> to use the platform's pre-configured credentials.
+          </small>
+        </div>
+        
+        <button id="btn-chat-settings-save" class="primary-btn" style="padding: 8px 16px; font-size: 0.85rem; border-radius: 8px; font-weight: 600; align-self: flex-end;" type="button">Save Changes</button>
       </div>
 
       <!-- Chatbot View -->

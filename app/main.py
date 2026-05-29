@@ -76,6 +76,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def custom_groq_key_middleware(request, call_next):
+    from app.providers.groq_llm import custom_groq_key_var
+    custom_key = request.headers.get("x-custom-groq-key")
+    token = custom_groq_key_var.set(custom_key.strip() if custom_key and custom_key.strip() else None)
+    try:
+        response = await call_next(request)
+        return response
+    finally:
+        custom_groq_key_var.reset(token)
+
+
 app.include_router(creatives_router)
 app.include_router(chat_router)
 app.include_router(instagram_router)

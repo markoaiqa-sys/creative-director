@@ -27,7 +27,11 @@ class ImageAnalyzer:
             return ""
 
         # Try Groq vision endpoint if configured
-        if self._grok_vision_endpoint and self._grok_api_key:
+        from app.providers.groq_llm import custom_groq_key_var
+        custom_key = custom_groq_key_var.get()
+        api_key = custom_key if custom_key else self._grok_api_key
+
+        if self._grok_vision_endpoint and api_key:
             try:
                 # send base64 images as JSON
                 imgs = []
@@ -37,7 +41,7 @@ class ImageAnalyzer:
                     else:
                         imgs.append(img)
                 payload = {"images": imgs}
-                headers = {"Authorization": f"Bearer {self._grok_api_key}", "Content-Type": "application/json"}
+                headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
                 res = await self._client.post(self._grok_vision_endpoint, json=payload, headers=headers)
                 if res.status_code == 200:
                     data = res.json()

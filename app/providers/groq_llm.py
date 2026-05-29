@@ -32,6 +32,12 @@ def _dereference_schema(schema: dict) -> dict:
     return resolved
 
 
+from contextvars import ContextVar
+
+custom_groq_key_var: ContextVar[str | None] = ContextVar("custom_groq_key", default=None)
+custom_gemini_key_var: ContextVar[str | None] = ContextVar("custom_gemini_key", default=None)
+
+
 class GroqLLMProvider:
     def __init__(self, settings: Settings) -> None:
         self._api_key = settings.groq_api_key
@@ -51,6 +57,16 @@ class GroqLLMProvider:
         self._gemini_base_url = settings.gemini_base_url.rstrip("/")
         self._client: httpx.AsyncClient | None = None
         self._misconfigured_error: str | None = None
+
+    @property
+    def api_key(self) -> str | None:
+        custom = custom_groq_key_var.get()
+        return custom if custom is not None else self._api_key
+
+    @property
+    def gemini_key(self) -> str | None:
+        custom = custom_gemini_key_var.get()
+        return custom if custom is not None else self._gemini_api_key
 
     async def structured_completion(
         self,
@@ -89,7 +105,7 @@ class GroqLLMProvider:
     ) -> dict[str, Any]:
         if self._misconfigured_error:
             raise RuntimeError(self._misconfigured_error)
-        if not self._api_key and not self._gemini_api_key:
+        if not self.api_key and not self.gemini_key:
             self._misconfigured_error = "Neither GROQ_API_KEY nor GEMINI_API_KEY is configured."
             raise ValueError(self._misconfigured_error)
 
@@ -97,7 +113,7 @@ class GroqLLMProvider:
         models = [self._model, *self._fallback_models]
 
         for model_name in models:
-            if not self._api_key:
+            if not self.api_key:
                 break
             try:
                 return await self._structured_completion_with_model(
@@ -108,7 +124,7 @@ class GroqLLMProvider:
             except RuntimeError as exc:
                 errors.append(f"{model_name}: {exc}")
 
-        if self._gemini_api_key:
+        if self.gemini_key:
             try:
                 return await self._structured_completion_with_gemini(
                     instructions=instructions,
@@ -133,7 +149,7 @@ class GroqLLMProvider:
                 response = await client.post(
                     "/chat/completions",
                     headers={
-                        "Authorization": f"Bearer {self._api_key}",
+                        "Authorization": f"Bearer {self.api_key}",
                         "Content-Type": "application/json",
                     },
                     json={
@@ -206,7 +222,7 @@ class GroqLLMProvider:
                 response = await client.post(
                     url,
                     headers={"Content-Type": "application/json"},
-                    params={"key": self._gemini_api_key},
+                    params={"key": self.gemini_key},
                     json={
                         "system_instruction": {
                             "parts": [{"text": (

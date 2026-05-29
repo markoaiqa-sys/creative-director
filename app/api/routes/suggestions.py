@@ -113,11 +113,15 @@ CONCEPTS ({len(concepts)}):
 """
 
     try:
+        from app.providers.groq_llm import custom_groq_key_var
+        custom_key = custom_groq_key_var.get()
+        api_key = custom_key if custom_key else settings.groq_api_key
+
         async with httpx.AsyncClient(timeout=settings.groq_timeout_seconds) as client:
             response = await client.post(
                 f"{settings.groq_base_url}/chat/completions",
                 headers={
-                    "Authorization": f"Bearer {settings.groq_api_key}",
+                    "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
                 },
                 json={
@@ -164,11 +168,15 @@ CURRENT CAMPAIGN DATA:
 """
 
     try:
+        from app.providers.groq_llm import custom_groq_key_var
+        custom_key = custom_groq_key_var.get()
+        api_key = custom_key if custom_key else settings.groq_api_key
+
         async with httpx.AsyncClient(timeout=settings.groq_timeout_seconds) as client:
             response = await client.post(
                 f"{settings.groq_base_url}/chat/completions",
                 headers={
-                    "Authorization": f"Bearer {settings.groq_api_key}",
+                    "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
                 },
                 json={
