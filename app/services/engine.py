@@ -373,11 +373,10 @@ class CreativeDirectorEngine:
                 output_path = rendered_dir / f"{asset.concept_id}.png"
                 image.save(output_path, format="PNG", optimize=True)
 
-                image_base64 = base64.b64encode(image_bytes).decode("utf-8")
                 rendered_ad = RenderedAd(
                     concept_id=asset.concept_id,
                     image_path=str(output_path),
-                    image_base64=f"data:image/png;base64,{image_base64}",
+                    image_base64=None,
                     width=image.width,
                     height=image.height,
                     headline_lines=[asset.headline or asset.hook_text],
@@ -392,12 +391,7 @@ class CreativeDirectorEngine:
                     else None
                 )
                 if preview and preview.image_path:
-                    try:
-                        with open(preview.image_path, "rb") as f:
-                            preview_b64 = base64.b64encode(f.read()).decode("utf-8")
-                            preview.image_base64 = f"data:image/png;base64,{preview_b64}"
-                    except Exception as e:
-                        print(f"[WARN] Failed to base64 encode preview: {e}")
+                    preview.image_base64 = None
                         
                 rendered_assets.append(asset.model_copy(update={"rendered_ad": rendered_ad, "preview": preview}))
             except Exception as exc:

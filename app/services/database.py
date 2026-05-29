@@ -387,6 +387,41 @@ class CampaignDatabase(BaseDatabase):
                 CREATE INDEX IF NOT EXISTS idx_creative_campaigns_client_email ON creative_campaigns(client_email);
                 """
             )
+            
+            # Run database migration to clean up base64 image strings from creative_assets JSONB to prevent OOM errors
+            try:
+                cur.execute(
+                    """
+                    SELECT id, creative_assets 
+                    FROM creative_campaigns 
+                    WHERE creative_assets::text LIKE '%"image_base64": "data:%'
+                    """
+                )
+                rows = cur.fetchall()
+                if rows:
+                    logger.info(f"Database Migration: Found {len(rows)} campaigns with base64 data to clean up.")
+                    for row_id, assets_json in rows:
+                        if not assets_json:
+                            continue
+                        assets = assets_json if isinstance(assets_json, list) else json.loads(assets_json)
+                        modified = False
+                        for asset in assets:
+                            rendered_ad = asset.get("rendered_ad")
+                            if rendered_ad and "image_base64" in rendered_ad and rendered_ad["image_base64"] is not None:
+                                rendered_ad["image_base64"] = None
+                                modified = True
+                            preview = asset.get("preview")
+                            if preview and "image_base64" in preview and preview["image_base64"] is not None:
+                                preview["image_base64"] = None
+                                modified = True
+                        if modified:
+                            cur.execute(
+                                "UPDATE creative_campaigns SET creative_assets = %s WHERE id = %s",
+                                (json.dumps(assets), row_id)
+                            )
+                    logger.info("Database Migration: Successfully cleaned up all campaign base64 images.")
+            except Exception as e:
+                logger.error(f"Database Migration Error: Failed to run database cleanup migration: {e}")
 
     def save_campaign(self, package: CampaignPackage, client_email: str | None = None, is_guest: bool = False) -> str | None:
         if is_guest:
@@ -517,8 +552,8 @@ class CampaignDatabase(BaseDatabase):
                             "description": asset.get("description"),
                             "cta": asset.get("cta"),
                             "score": score,
-                            "rendered_image_path": rendered_ad.get("image_base64") or rendered_ad.get("image_path"),
-                            "preview_image_path": preview.get("image_base64") or preview.get("image_path"),
+                            "rendered_image_path": rendered_ad.get("image_path") or rendered_ad.get("image_base64"),
+                            "preview_image_path": preview.get("image_path") or preview.get("image_base64"),
                         })
                     
                     if c_slug in campaign_data:
@@ -609,8 +644,6 @@ class CampaignDatabase(BaseDatabase):
                                 video_urls=generated.get("video_urls", []),
                                 rendered_image_path=rendered_ad.get("image_path"),
                                 preview_image_path=preview.get("image_path"),
-                                rendered_image_base64=rendered_ad.get("image_base64"),
-                                preview_image_base64=preview.get("image_base64"),
                                 output_directory="",
                             )
                         )
