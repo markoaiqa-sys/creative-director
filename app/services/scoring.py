@@ -44,6 +44,7 @@ class CreativeScoringService:
         ad_copies: list[AdCopy],
         generated_creatives: list[GeneratedCreative],
     ) -> list[CreativeScore]:
+        import asyncio
         copy_lookup = {(copy.hook_text, copy.angle_name): copy for copy in ad_copies}
         generated_lookup = {creative.concept_id: creative for creative in generated_creatives}
         token_frequency = Counter(
@@ -52,12 +53,20 @@ class CreativeScoringService:
             for token in self._tokens(" ".join([copy.primary_text, copy.headline, copy.description]))
         )
 
-        scores: list[CreativeScore] = []
+        concept_copy_pairs = []
+        eval_tasks = []
         for concept in concepts:
             copy = copy_lookup.get((concept.hook_text, concept.angle_name)) or self._fallback_copy(concept=concept, ad_copies=ad_copies)
+            concept_copy_pairs.append((concept, copy))
+            eval_tasks.append(self._llm_evaluate(payload=payload, concept=concept, copy=copy))
+
+        llm_evals = await asyncio.gather(*eval_tasks)
+
+        scores: list[CreativeScore] = []
+        for i, (concept, copy) in enumerate(concept_copy_pairs):
             generated = generated_lookup.get(concept.concept_id)
             heuristic = self._heuristic_scores(payload=payload, copy=copy, concept=concept, generated=generated, token_frequency=token_frequency)
-            llm_eval = await self._llm_evaluate(payload=payload, concept=concept, copy=copy)
+            llm_eval = llm_evals[i]
 
             clarity = self._blend_scores(heuristic["clarity"], llm_eval.clarity)
             platform_fit = self._blend_scores(heuristic["platform_fit"], llm_eval.platform_fit)
@@ -99,11 +108,13 @@ class CreativeScoringService:
         concepts: list[VisualConcept],
         ad_copies: list[AdCopy],
         generated_creatives: list[GeneratedCreative],
+        scored_creatives: list[CreativeScore] | None = None,
     ) -> list[AdCopy]:
         if not ad_copies:
             return []
 
-        scored_creatives = await self.score(payload, concepts, ad_copies, generated_creatives)
+        if scored_creatives is None:
+            scored_creatives = await self.score(payload, concepts, ad_copies, generated_creatives)
         score_lookup = {item.concept_id: item for item in scored_creatives}
 
         scored: list[AdCopy] = []

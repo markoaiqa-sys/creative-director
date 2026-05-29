@@ -16,12 +16,18 @@ class DatabasePool:
             # keepalives_idle: 30 seconds before sending keepalive
             # keepalives_interval: 10 seconds between keepalives
             # keepalives_count: 5 keepalive attempts before giving up
-            dsn_with_options = f"{self._dsn}?connect_timeout=5&keepalives=1&keepalives_idle=30&keepalives_interval=10&keepalives_count=5"
-            self._pool = SimpleConnectionPool(
-                minconn=settings.db_pool_min_size,
-                maxconn=settings.db_pool_max_size,
-                dsn=dsn_with_options,
-            )
+            try:
+                dsn_with_options = f"{self._dsn}?connect_timeout=5&keepalives=1&keepalives_idle=30&keepalives_interval=10&keepalives_count=5"
+                self._pool = SimpleConnectionPool(
+                    minconn=settings.db_pool_min_size,
+                    maxconn=settings.db_pool_max_size,
+                    dsn=dsn_with_options,
+                )
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"[DB_CONNECT_FAIL] Failed to initialize Supabase connection pool: {e}. Running in memory / fallback mode.")
+                self._pool = None
 
     @property
     def enabled(self) -> bool:

@@ -155,9 +155,35 @@ class ChatDatabase(BaseDatabase):
                 """
             )
 
+            # Create allowed_users table
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS allowed_users (
+                    email VARCHAR(255) PRIMARY KEY,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                );
+                """
+            )
+
+            # Pre-populate allowed_users table with default active emails
+            default_emails = ["harshdwivedihd360@gmail.com", "markoaiqa@gmail.com", "guest@marko.ai"]
+            for email in default_emails:
+                cur.execute(
+                    "INSERT INTO allowed_users (email) VALUES (%s) ON CONFLICT (email) DO NOTHING;",
+                    (email,)
+                )
+
+    def is_email_allowed(self, email: str) -> bool:
+        with self._cursor() as cur:
+            if cur is None:
+                return False
+            cur.execute("SELECT 1 FROM allowed_users WHERE email = %s;", (email.lower().strip(),))
+            return cur.fetchone() is not None
+
     def save_message(self, session_id: str, role: str, content: str, client_email: str | None = None, is_guest: bool = False) -> None:
-        if is_guest:
-            return
+        # Allow guest session recording for offline / local evaluation
+        # if is_guest:
+        #     return
         with self._cursor() as cur:
             if cur is None:
                 return
@@ -226,8 +252,9 @@ class ChatDatabase(BaseDatabase):
 
     def save_knowledge_base_item(self, session_id: str, file_name: str, file_type: str, file_path: str, 
                                  file_content: str | None = None, metadata: dict | None = None, is_guest: bool = False) -> str | None:
-        if is_guest:
-            return None
+        # Allow guest session recording for offline / local evaluation
+        # if is_guest:
+        #     return None
         """Save a knowledge base item to Supabase."""
         with self._cursor() as cur:
             if cur is None:
@@ -280,8 +307,9 @@ class ChatDatabase(BaseDatabase):
     def save_execution_history(self, session_id: str, campaign_name: str, execution_type: str, 
                               input_data: dict, output_data: dict | None = None, status: str = "success",
                               error_message: str | None = None, execution_time_ms: int = 0, is_guest: bool = False) -> str | None:
-        if is_guest:
-            return None
+        # Allow guest session recording for offline / local evaluation
+        # if is_guest:
+        #     return None
         """Save execution/generation history to Supabase."""
         with self._cursor() as cur:
             if cur is None:
@@ -424,8 +452,9 @@ class CampaignDatabase(BaseDatabase):
                 logger.error(f"Database Migration Error: Failed to run database cleanup migration: {e}")
 
     def save_campaign(self, package: CampaignPackage, client_email: str | None = None, is_guest: bool = False) -> str | None:
-        if is_guest:
-            return None
+        # Allow guest session recording for offline / local evaluation
+        # if is_guest:
+        #     return None
         with self._cursor() as cur:
             if cur is None:
                 return None

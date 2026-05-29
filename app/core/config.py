@@ -65,6 +65,7 @@ class Settings(BaseSettings):
     db_pool_max_size: int = 5
     api_auth_enabled: bool = False
     app_api_key: str | None = None
+    google_client_id: str | None = None
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

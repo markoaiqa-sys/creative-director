@@ -13,6 +13,7 @@ from app.api.routes.chat import router as chat_router
 from app.api.routes.instagram import router as instagram_router
 from app.api.routes.suggestions import router as suggestions_router
 from app.api.routes.providers import router as providers_router
+from app.api.routes.auth import router as auth_router
 from app.core.config import get_settings
 from app.services.engine import ServiceContainer
 
@@ -80,6 +81,7 @@ app.include_router(chat_router)
 app.include_router(instagram_router)
 app.include_router(suggestions_router)
 app.include_router(providers_router)
+app.include_router(auth_router)
 app.mount("/frontend", StaticFiles(directory=str(FRONTEND_DIR)), name="frontend")
 
 @app.get("/output/{file_path:path}")
@@ -171,6 +173,7 @@ async def ui_config() -> dict[str, str]:
         "frontend_url": settings.frontend_url,
         "groq_status": "Connected" if settings.groq_api_key else "Missing key",
         "nanobanana_status": "Configured" if settings.nanobanana_api_key else "Unavailable",
+        "google_client_id": settings.google_client_id or "",
     }
 
 @app.get("/health")

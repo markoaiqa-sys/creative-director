@@ -237,6 +237,7 @@ class CreativeDirectorEngine:
             visual_concepts,
             ad_copies,
             generated_creatives,
+            scored_creatives=scored_creatives,
         )
 
         created_at = datetime.now(tz=UTC)

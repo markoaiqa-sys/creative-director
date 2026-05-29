@@ -104,11 +104,11 @@ async def api_score_and_package(
             is_guest=is_guest_bool,
         )
         # Automatically add generated final images to the Knowledge Base
-        if package and package.creatives:
-            for c in package.creatives:
-                if c.rendered_image_path:
-                    # rendered_image_path is usually like /output/campaign_slug/timestamp/file.png
-                    rel_path = c.rendered_image_path.lstrip("/")
+        if package and package.creative_assets:
+            for c in package.creative_assets:
+                if c.rendered_ad and c.rendered_ad.image_path:
+                    # image_path is usually like /output/campaign_slug/timestamp/file.png
+                    rel_path = c.rendered_ad.image_path.lstrip("/")
                     if rel_path.startswith("output/"):
                         rel_path = rel_path[7:]
                     

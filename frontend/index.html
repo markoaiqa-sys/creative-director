@@ -40,6 +40,14 @@
       <div class="login-divider">
         <span>OR</span>
       </div>
+
+      <!-- Google Sign-In Container -->
+      <div id="google-signin-container" style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; margin-bottom: 16px; gap: 8px;">
+        <div id="google-signin-btn" style="width: 100%; display: flex; justify-content: center;"></div>
+      </div>
+      
+      <!-- General Login Error Container -->
+      <div id="login-error-message" style="color: #ff5252; font-size: 0.82rem; margin-top: -8px; margin-bottom: 16px; display: none; text-align: center; font-weight: 500; line-height: 1.4; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.2); padding: 8px 12px; border-radius: 8px; width: 100%;"></div>
       
       <button type="button" id="login-guest-btn" class="login-guest-btn">Continue as guest <span>(mock workspace)</span></button>
     </div>
@@ -137,10 +145,18 @@
           </div>
         </section>
         <section class="hero hidden" id="hero-card">
-          <div class="hero-head">
+          <div class="hero-head" style="display: flex; justify-content: space-between; align-items: center; gap: 16px;">
             <h1>Strategy Dashboard</h1>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <button id="btn-view-results" class="glowing-btn hidden" type="button">View Generated Ads</button>
+              <button id="btn-reset-form" class="reset-btn hidden" type="button" title="Start Fresh / New Campaign">＋ New Campaign</button>
+            </div>
           </div>
           <p class="subtitle">Generate ready-to-launch creative packages with rendered ads, previews, and export files.</p>
+          <div id="form-error-banner" class="hidden" style="margin: 16px 0; padding: 12px 16px; background: #2d1918; border: 1px solid #7d2d27; color: #f3d5d3; border-radius: 12px; font-size: 0.9rem; font-weight: 500; display: flex; align-items: center; gap: 8px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            <span id="form-error-msg"></span>
+          </div>
           <section class="engine-strip">
             <div><h2>Finished Ad Generation Engine</h2><p>Run the full pipeline to generate scored copy, product-grounded images, branded ads, previews, and upload-ready outputs.</p></div>
             <button id="hero-generate" class="primary-btn" type="button">Generate Final Ads</button>
@@ -186,7 +202,26 @@
         </section>
         <section class="loading-card hidden" id="loading-panel"><h2><div class="spinner-ring"></div> Generating campaign...</h2><p>This may take 2-3 minutes. Your final creatives, previews, and export package are being assembled.</p><div class="loading-dots" aria-hidden="true"><span></span><span></span><span></span></div></section>
         <section class="results-card hidden" id="results-panel">
-          <header class="results-head"><div><h2 id="results-title">Campaign Output</h2><p id="live-status">Ready.</p></div><div class="tabs"><button class="tab active" data-tab="finals" type="button">Final Ads <span id="finals-count">0</span></button><button class="tab" data-tab="previews" type="button">Previews <span id="previews-count">0</span></button><button class="tab" data-tab="hooks" type="button">Hooks <span id="hooks-count">0</span></button><button class="tab" data-tab="angles" type="button">Angles <span id="angles-count">0</span></button><button class="tab" data-tab="copy" type="button">Copy <span id="copy-count">0</span></button><button class="tab" data-tab="concepts" type="button">Concepts <span id="concepts-count">0</span></button><button class="tab" data-tab="reels" type="button">Reels <span id="reels-count">0</span></button><button class="tab" data-tab="exports" type="button">Exports <span id="exports-count">0</span></button></div></header>
+          <header class="results-head">
+            <div>
+              <h2 id="results-title" style="margin: 0;">Campaign Output</h2>
+              <p id="live-status" style="margin: 0;">Ready.</p>
+            </div>
+            <div class="tabs">
+              <button class="tab active" data-tab="finals" type="button">Final Ads <span id="finals-count">0</span></button>
+              <button class="tab" data-tab="previews" type="button">Previews <span id="previews-count">0</span></button>
+              <button class="tab" data-tab="hooks" type="button">Hooks <span id="hooks-count">0</span></button>
+              <button class="tab" data-tab="angles" type="button">Angles <span id="angles-count">0</span></button>
+              <button class="tab" data-tab="copy" type="button">Copy <span id="copy-count">0</span></button>
+              <button class="tab" data-tab="concepts" type="button">Concepts <span id="concepts-count">0</span></button>
+              <button class="tab" data-tab="reels" type="button">Reels <span id="reels-count">0</span></button>
+              <button class="tab" data-tab="exports" type="button">Exports <span id="exports-count">0</span></button>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <button id="btn-modify-inputs" class="glowing-btn" type="button">Modify Inputs</button>
+              <button id="btn-reset-form-results" class="reset-btn" type="button" title="Start Fresh / New Campaign">＋ New Campaign</button>
+            </div>
+          </header>
           <section id="tab-finals" class="output-tab"><div class="section-title">Rendered Ads <span id="finals-count-large">0</span></div><div id="finals-output" class="stack"></div></section>
           <section id="tab-previews" class="output-tab hidden"><div class="section-title">Feed Previews <span id="previews-count-large">0</span></div><div id="previews-output" class="stack"></div></section>
           <section id="tab-hooks" class="output-tab"><div class="section-title">Generated Hooks <span id="hooks-count-large">0</span></div><div id="hooks-output" class="stack"></div></section>
@@ -630,7 +665,10 @@
       </div>
 
       <div id="chat-history-panel" class="hidden" style="position: absolute; top: 60px; right: 10px; width: 250px; background: #18181b; border: 1px solid #27272a; border-radius: 8px; z-index: 100; max-height: 300px; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
-        <div style="padding: 10px; border-bottom: 1px solid #27272a; font-weight: 500; color: #ffffff;">Previous Chats</div>
+        <div style="padding: 10px; border-bottom: 1px solid #27272a; font-weight: 500; color: #ffffff; display: flex; justify-content: space-between; align-items: center;">
+          <span>Previous Chats</span>
+          <button id="btn-chat-history-close" style="background: none; border: none; color: #a1a1aa; cursor: pointer; font-size: 16px; padding: 2px 6px; line-height: 1; transition: color 0.2s;" onmouseover="this.style.color='#ffffff'" onmouseout="this.style.color='#a1a1aa'" title="Close">✕</button>
+        </div>
         <div id="chat-sessions-list"></div>
       </div>
 
@@ -659,8 +697,8 @@
           <div class="chat-composer-bottom">
             <div class="chat-composer-selectors">
               <select id="chat-mode-select" class="chat-select">
+                <option value="generate" selected>Generate</option>
                 <option value="ask">Ask</option>
-                <option value="generate">Generate</option>
               </select>
               <select id="chat-model-select" class="chat-select">
                 <option value="marko-2.0-mini">marko-2.0-mini</option>
@@ -690,7 +728,6 @@
   <div id="imageModal" class="image-modal hidden" onclick="if(event.target === this) closeImageModal()">
     <div class="image-modal-content">
       <button class="modal-close" onclick="closeImageModal()">✕</button>
-      <h2 id="modalTitle">Creative Preview</h2>
       <img id="modalImage" src="" alt="Preview" class="modal-image">
     </div>
   </div>

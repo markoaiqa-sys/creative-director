@@ -39,6 +39,123 @@ document.addEventListener("DOMContentLoaded", () => {
     overlay.style.display = "none";
   }
 
+  // Fetch ui-config to set up Google Auth
+  fetch(API_BASE_URL + "/ui-config")
+    .then(r => r.json())
+    .then(config => {
+      const googleClientId = config.google_client_id;
+      setupGoogleAuth(googleClientId);
+    })
+    .catch(err => {
+      console.error("Failed to load ui-config:", err);
+      setupGoogleAuth(""); // Fallback to empty (mock button)
+    });
+
+  function setupGoogleAuth(clientId) {
+    const container = document.getElementById("google-signin-btn");
+    if (!container) return;
+
+    if (clientId && clientId.trim() !== "") {
+      // Load Google script dynamically
+      const script = document.createElement("script");
+      script.src = "https://accounts.google.com/gsi/client";
+      script.async = true;
+      script.defer = true;
+      script.onload = () => {
+        try {
+          google.accounts.id.initialize({
+            client_id: clientId,
+            callback: handleGoogleCredentialResponse
+          });
+          google.accounts.id.renderButton(container, {
+            type: "standard",
+            theme: "outline",
+            size: "large",
+            text: "signin_with",
+            shape: "rectangular",
+            logo_alignment: "left",
+            width: "356"
+          });
+        } catch (e) {
+          console.error("Error rendering Google Sign-In button:", e);
+          renderMockGoogleButton(container, "Failed to initialize Google library");
+        }
+      };
+      script.onerror = () => {
+        renderMockGoogleButton(container, "Could not load Google SDK");
+      };
+      document.head.appendChild(script);
+    } else {
+      renderMockGoogleButton(container, "Google Auth is not configured");
+    }
+  }
+
+  function renderMockGoogleButton(container, tooltipText) {
+    container.innerHTML = `
+      <button type="button" class="google-btn-mock" id="mock-google-btn">
+        <svg viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg">
+          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
+          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" fill="#EA4335"/>
+        </svg>
+        <span>Sign in with Google</span>
+      </button>
+      <div id="google-status-msg" class="google-status-msg info" style="display: none; color: #a1a1aa;">${tooltipText}</div>
+    `;
+
+    const mockBtn = document.getElementById("mock-google-btn");
+    const statusMsg = document.getElementById("google-status-msg");
+    if (mockBtn) {
+      mockBtn.addEventListener("click", () => {
+        if (statusMsg) {
+          statusMsg.style.display = "block";
+          statusMsg.className = "google-status-msg error";
+          statusMsg.textContent = "Google Client ID is missing. Add GOOGLE_CLIENT_ID to your .env to enable.";
+        }
+      });
+    }
+  }
+
+  async function handleGoogleCredentialResponse(response) {
+    const errorEl = document.getElementById("login-error-message");
+    if (errorEl) errorEl.style.display = "none";
+
+    try {
+      const res = await fetch(API_BASE_URL + "/api/auth/google", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ credential: response.credential })
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || "Google login failed verification.");
+      }
+
+      const data = await res.json();
+      localStorage.setItem("auth_email", data.email);
+      localStorage.setItem("is_guest", "false");
+      localStorage.setItem("auth_name", data.name);
+      if (data.picture) {
+        localStorage.setItem("auth_picture", data.picture);
+      } else {
+        localStorage.removeItem("auth_picture");
+      }
+
+      overlay.style.display = "none";
+      window.location.reload();
+    } catch (err) {
+      console.error("Google Auth error:", err);
+      if (errorEl) {
+        errorEl.textContent = err.message;
+        errorEl.style.display = "block";
+      }
+    }
+  }
+
   // Inject user profile details if logged in
   if (authEmail) {
     const nameEl = document.getElementById("user-name-element");
@@ -65,15 +182,42 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const loginForm = document.getElementById("login-form");
   if (loginForm) {
-    loginForm.addEventListener("submit", (e) => {
+    loginForm.addEventListener("submit", async (e) => {
       e.preventDefault();
       const email = document.getElementById("login-email").value;
+      const errorEl = document.getElementById("login-error-message");
+      if (errorEl) errorEl.style.display = "none";
+
       if (email) {
-        localStorage.setItem("auth_email", email);
-        localStorage.setItem("is_guest", "false");
-        localStorage.setItem("auth_name", email.split('@')[0]);
-        overlay.style.display = "none";
-        window.location.reload(); // Reload to fetch client-specific data
+        try {
+          const res = await fetch(API_BASE_URL + "/api/auth/email-login", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ email: email })
+          });
+
+          if (!res.ok) {
+            const errData = await res.json();
+            throw new Error(errData.detail || "Email verification failed.");
+          }
+
+          const data = await res.json();
+          localStorage.setItem("auth_email", data.email);
+          localStorage.setItem("is_guest", "false");
+          localStorage.setItem("auth_name", data.name);
+          localStorage.removeItem("auth_picture");
+
+          overlay.style.display = "none";
+          window.location.reload(); // Reload to fetch client-specific data
+        } catch (err) {
+          console.error("Email login validation error:", err);
+          if (errorEl) {
+            errorEl.textContent = err.message;
+            errorEl.style.display = "block";
+          }
+        }
       }
     });
   }
@@ -504,23 +648,61 @@ function showSupervisor() {
   if (navExecutionHistory) navExecutionHistory.classList.remove("active");
 }
 
+function toggleResultsHeaderButtons() {
+  const btnModify = byId("btn-modify-inputs");
+  const btnResetResults = byId("btn-reset-form-results");
+  const isCreativeDirectorActive = dashboardNav && dashboardNav.classList.contains("active");
+  
+  if (isCreativeDirectorActive && chatContext.campaign) {
+    if (btnModify) btnModify.classList.remove("hidden");
+    if (btnResetResults) btnResetResults.classList.remove("hidden");
+  } else {
+    if (btnModify) btnModify.classList.add("hidden");
+    if (btnResetResults) btnResetResults.classList.add("hidden");
+  }
+}
+
+function showFormError(msg) {
+  const banner = byId("form-error-banner");
+  const msgEl = byId("form-error-msg");
+  if (banner && msgEl) {
+    msgEl.textContent = msg;
+    banner.classList.remove("hidden");
+  }
+}
+
+function hideFormError() {
+  const banner = byId("form-error-banner");
+  if (banner) {
+    banner.classList.add("hidden");
+  }
+}
+
 function showDashboard() {
   if (supervisorPanel) supervisorPanel.classList.add("hidden");
   if (supervisorNav) supervisorNav.classList.remove("active");
-  if (heroCard) heroCard.classList.remove("hidden");
   if (loadingPanel) loadingPanel.classList.add("hidden");
-  // Only hide results if we haven't generated anything yet
-  if (resultsPanel) {
-    if (!chatContext.campaign) {
-      resultsPanel.classList.add("hidden");
-    } else {
-      resultsPanel.classList.remove("hidden");
-    }
+  
+  const btnViewResults = byId("btn-view-results");
+  const btnResetForm = byId("btn-reset-form");
+  if (chatContext.campaign) {
+    if (heroCard) heroCard.classList.add("hidden");
+    if (resultsPanel) resultsPanel.classList.remove("hidden");
+    if (btnViewResults) btnViewResults.classList.remove("hidden");
+    if (btnResetForm) btnResetForm.classList.remove("hidden");
+  } else {
+    if (heroCard) heroCard.classList.remove("hidden");
+    if (resultsPanel) resultsPanel.classList.add("hidden");
+    if (btnViewResults) btnViewResults.classList.add("hidden");
+    if (btnResetForm) btnResetForm.classList.add("hidden");
   }
+  
   if (historyPanel) historyPanel.classList.add("hidden");
   if (dashboardNav) dashboardNav.classList.add("active");
   document.querySelectorAll(".specialist").forEach((n) => n.classList.remove("active"));
   if (navExecutionHistory) navExecutionHistory.classList.remove("active");
+
+  toggleResultsHeaderButtons();
 }
 
 function showLoading() {
@@ -537,6 +719,25 @@ function showResults() {
   if (loadingPanel) loadingPanel.classList.add("hidden");
   if (resultsPanel) resultsPanel.classList.remove("hidden");
   if (historyPanel) historyPanel.classList.add("hidden");
+
+  const btnViewResults = byId("btn-view-results");
+  if (btnViewResults) {
+    if (chatContext.campaign) {
+      btnViewResults.classList.remove("hidden");
+    } else {
+      btnViewResults.classList.add("hidden");
+    }
+  }
+  const btnResetForm = byId("btn-reset-form");
+  if (btnResetForm) {
+    if (chatContext.campaign) {
+      btnResetForm.classList.remove("hidden");
+    } else {
+      btnResetForm.classList.add("hidden");
+    }
+  }
+
+  toggleResultsHeaderButtons();
 }
 
 function showHistory() {
@@ -576,17 +777,97 @@ function resetOutputs() {
   Object.keys(countTargets).forEach((key) => setCount(key, 0));
 }
 
+function resetGenerationForm() {
+  hideFormError();
+  clearFieldErrors();
+  // Reset text inputs
+  const textFields = [
+    "f-brand", "f-desc", "f-audience", "f-benefits", "f-extra", 
+    "f-competitors", "f-visual", "f-brand-colors", "f-brand-fonts"
+  ];
+  textFields.forEach(id => {
+    const el = byId(id);
+    if (el) el.value = "";
+  });
+
+  // Reset file inputs
+  const logoEl = byId("f-logo");
+  if (logoEl) logoEl.value = "";
+  
+  const samplesEl = byId("f-samples");
+  if (samplesEl) samplesEl.value = "";
+  selectedSampleFiles = [];
+  selectedKnowledgeImages = [];
+  const samplesList = byId("f-samples-list");
+  if (samplesList) samplesList.innerHTML = "";
+  
+  const refSimWrap = byId("f-ref-sim-wrap");
+  if (refSimWrap) refSimWrap.classList.add("hidden");
+  const refSimVal = byId("f-ref-sim-value");
+  if (refSimVal) refSimVal.textContent = "0.50";
+  const refSim = byId("f-ref-sim");
+  if (refSim) refSim.value = "0.5";
+
+  // Reset selects
+  const platform = byId("f-platform");
+  if (platform) platform.selectedIndex = 0;
+  const objective = byId("f-objective");
+  if (objective) objective.selectedIndex = 0;
+  const tone = byId("f-tone");
+  if (tone) tone.selectedIndex = 0;
+
+  // Reset counts
+  const hooks = byId("f-hooks");
+  if (hooks) hooks.value = "5";
+  const angles = byId("f-angles");
+  if (angles) angles.value = "3";
+  const copy = byId("f-copy");
+  if (copy) copy.value = "5";
+  const concepts = byId("f-concepts");
+  if (concepts) concepts.value = "5";
+
+  // Clear active campaign context
+  if (chatContext) {
+    chatContext.campaign = null;
+  }
+  
+  // Reset outputs
+  resetOutputs();
+
+  // Show inputs form
+  showDashboard();
+  
+  // Refresh sample hints UI
+  refreshSampleHint();
+  
+  // Refresh KB images states if open
+  const kbGrid = document.getElementById("kb-grid");
+  if (kbGrid && kbGrid.innerHTML) {
+    fetchKnowledgeBaseImages();
+  }
+}
+
 function activateTab(tab) {
   if (supervisorPanel) supervisorPanel.classList.add("hidden");
   if (supervisorNav) supervisorNav.classList.remove("active");
   document.querySelectorAll(".tab").forEach((n) => n.classList.toggle("active", n.dataset.tab === tab));
   ["finals", "previews", "hooks", "angles", "copy", "concepts", "reels", "exports"].forEach((name) => {
-    byId(`tab-${name}`).classList.toggle("hidden", tab !== name);
+    const el = byId(`tab-${name}`);
+    if (el) el.classList.toggle("hidden", tab !== name);
   });
-  document.querySelectorAll(".specialist").forEach((n) => n.classList.toggle("active", n.dataset.agentTab === tab));
-  dashboardNav.classList.remove("active");
-  resultsTitle.textContent = "Campaign Output";
+  
+  const isSpecialistTab = ["hooks", "angles", "copy", "concepts", "reels"].includes(tab);
+  if (isSpecialistTab) {
+    document.querySelectorAll(".specialist").forEach((n) => n.classList.toggle("active", n.dataset.agentTab === tab));
+    if (dashboardNav) dashboardNav.classList.remove("active");
+  } else {
+    document.querySelectorAll(".specialist").forEach((n) => n.classList.remove("active"));
+    if (dashboardNav) dashboardNav.classList.add("active");
+  }
+  
+  if (resultsTitle) resultsTitle.textContent = "Campaign Output";
   chatContext.active_specialist = tab;
+  toggleResultsHeaderButtons();
 }
 
 function toggleCampaign(id) {
@@ -608,7 +889,9 @@ function openImageModal(imageUrl, title) {
   
   if (modal && modalImage) {
     modalImage.src = imageUrl;
-    modalTitle.textContent = title || "Creative Preview";
+    if (modalTitle) {
+      modalTitle.textContent = title || "Creative Preview";
+    }
     modal.classList.remove("hidden");
   }
 }
@@ -1630,9 +1913,6 @@ function humanizeToken(value) {
 }
 
 function renderAll(data) {
-  showResults();
-  activateTab("finals");
-
   const hooks = data.hooks || [];
   const angles = data.angles || [];
   const copies = [...(data.ad_copies || [])].sort((a, b) => (b.total_score ?? -1) - (a.total_score ?? -1));
@@ -1644,6 +1924,11 @@ function renderAll(data) {
   const csvUrl = campaignDir ? toPublicAssetUrl(`${campaignDir}\\exports\\meta_ads_bulk_upload.csv`) : "";
   const renderedCount = assets.filter((asset) => asset.rendered_ad).length;
 
+  chatContext = { ...chatContext, campaign: { hooks, angles, copies, concepts, assets, exportRows } };
+
+  showResults();
+  activateTab("finals");
+
   setCount("finals", renderedCount);
   setCount("previews", previews.length);
   setCount("hooks", hooks.length);
@@ -1652,7 +1937,6 @@ function renderAll(data) {
   setCount("concepts", concepts.length);
   setCount("exports", exportRows.length);
 
-  chatContext = { ...chatContext, campaign: { hooks, angles, copies, concepts, assets, exportRows } };
   setStatus(`Generated ${renderedCount} full ad${renderedCount === 1 ? "" : "s"} with previews and export assets.`);
 
   list(finalsOutput, assets, (asset) => {
@@ -2368,7 +2652,73 @@ async function executeCampaignPipeline(payload) {
 
   showResults();
   activateTab("finals");
+  // Clear and render placeholder cards for each concept immediately in the final two-column layout
   finalsOutput.innerHTML = "";
+  topConcepts.forEach((concept, idx) => {
+    const placeholderCard = document.createElement("div");
+    placeholderCard.id = `temp-card-${idx}`;
+    placeholderCard.className = "card card-creative";
+    placeholderCard.innerHTML = `
+      <div class="creative-grid">
+        <!-- Left Column: Image / Spinner Container -->
+        <div class="creative-image-container-wrapper">
+          <div class="creative-image-container" style="min-height: 300px; display: flex; align-items: center; justify-content: center; background: #111113; border: 1px dashed #27272a; margin-top: 0; border-radius: 12px;">
+             <div class="spinner-inline" style="display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; padding: 20px;">
+                 <div class="spinner-ring" style="width: 32px; height: 32px; margin: 0;"></div>
+                 <span style="color: #a1a1aa; font-size: 0.85rem;">Waiting to generate...</span>
+             </div>
+          </div>
+        </div>
+        
+        <!-- Right Column: Metadata & Scoring loading status -->
+        <div class="creative-meta">
+          <div class="pill-row" style="display:flex; gap:6px;">
+            <span class="metric-pill" style="opacity: 0.5;">Rank -</span>
+            <span class="metric-pill" style="opacity: 0.8; background: #27272a; color: #a1a1aa;" class="score-pill">Awaiting Score</span>
+            <span class="metric-pill" style="opacity: 0.5;">${esc(payload.platform || "Platform")}</span>
+          </div>
+          <h3 class="headline-placeholder" style="color: #71717a; margin-top: 6px; font-size: 1.15rem; font-weight:700;">Awaiting Generation...</h3>
+          
+          <div class="final-summary-grid" style="margin-top: 12px;">
+            <div class="summary-chip emphasis">
+              <span>Best Hook</span>
+              <strong>Calculating...</strong>
+            </div>
+            <div class="summary-chip emphasis">
+              <span>Best Angle</span>
+              <strong>Calculating...</strong>
+            </div>
+            <div class="summary-chip confidence">
+              <span>Visual Confidence</span>
+              <strong>Awaiting...</strong>
+            </div>
+          </div>
+          
+          <div class="ad-copy-block" style="margin-top: 12px;">
+            <div class="ad-copy-label">Primary Text</div>
+            <p class="ad-copy-body" style="color: #a1a1aa; font-style: italic; margin-top: 4px;">Awaiting text evaluation...</p>
+          </div>
+          
+          <div class="ad-copy-block" style="margin-top: 12px;">
+            <div class="ad-copy-label">Headline</div>
+            <p class="ad-copy-inline" style="color: #a1a1aa; font-style: italic; margin-top: 4px;">Awaiting headline scoring...</p>
+          </div>
+          
+          <div class="ad-copy-inline-row" style="margin-top: 12px; display: flex; gap: 16px; font-size: 0.85rem;">
+            <div><strong>Description:</strong> <span style="color: #a1a1aa;">Awaiting scoring...</span></div>
+            <div><strong>CTA:</strong> <span style="color: #a1a1aa;">Awaiting scoring...</span></div>
+          </div>
+          
+          <div class="summary-stack" style="margin-top: 12px; font-size: 0.85rem; display: flex; flex-direction: column; gap: 4px;">
+            <div><strong>Visual Concept:</strong> <span style="color: #a1a1aa;">${esc(concept.scene_description || "N/A")}</span></div>
+            <div><strong>Style:</strong> <span style="color: #a1a1aa;">${esc(concept.style_reference || "N/A")}</span></div>
+          </div>
+        </div>
+      </div>
+    `;
+    finalsOutput.appendChild(placeholderCard);
+  });
+
   setStatus("Concepts generated! Rendering images sequentially...");
 
   // STEP 2: Generate Images Sequentially
@@ -2376,6 +2726,15 @@ async function executeCampaignPipeline(payload) {
   for (let i = 0; i < topConcepts.length; i++) {
     const concept = topConcepts[i];
     setStatus(`Generating Image ${i + 1} of ${topConcepts.length}...`);
+
+    // Update active card status to "Generating..."
+    const tempCard = document.getElementById(`temp-card-${i}`);
+    if (tempCard) {
+      const statusText = tempCard.querySelector(".spinner-inline span");
+      if (statusText) {
+        statusText.textContent = "Generating...";
+      }
+    }
 
     const imageReq = {
       payload: payload,
@@ -2390,6 +2749,21 @@ async function executeCampaignPipeline(payload) {
     const imageData = await imageResponse.json();
     if (!imageResponse.ok) {
       console.error(`Image ${i + 1} failed`, imageData);
+      if (tempCard) {
+        const imageWrapper = tempCard.querySelector(".creative-image-container-wrapper");
+        if (imageWrapper) {
+          imageWrapper.innerHTML = `
+             <div class="creative-image-container" style="min-height: 300px; display: flex; align-items: center; justify-content: center; background: #111113; border-radius: 12px; border: 1px solid #ef4444;">
+                 <span style="color: #ef4444; font-size: 0.9rem; font-weight:600;">Failed to generate image</span>
+             </div>
+          `;
+        }
+        const headlinePlaceholder = tempCard.querySelector(".headline-placeholder");
+        if (headlinePlaceholder) {
+          headlinePlaceholder.textContent = "Failed - Check server logs";
+          headlinePlaceholder.style.color = "#ef4444";
+        }
+      }
       // push an empty/failed creative so scoring doesn't break
       generated_creatives.push({
          concept_id: concept.concept_id,
@@ -2403,23 +2777,22 @@ async function executeCampaignPipeline(payload) {
 
     generated_creatives.push(imageData);
 
-    // Display partial card
+    // Display generated image
     if (imageData.image_urls && imageData.image_urls.length > 0) {
-      const tempCard = document.createElement("div");
-      tempCard.className = "card card-creative";
-      tempCard.innerHTML = `
-         <div class="card-status-bar" style="background-color: #f5a623; color: white;">Scoring...</div>
-         <div class="creative-image-container">
-             <img src="${toPublicAssetUrl(imageData.image_urls[0])}" class="creative-image" alt="Generating...">
-         </div>
-         <div class="creative-content">
-             <h3 class="creative-headline" style="color: #888;">Evaluating Text...</h3>
-             <div class="score-meta">
-                 <span class="meta-pill" style="opacity: 0.6;">Awaiting Score</span>
+      if (tempCard) {
+        const imageWrapper = tempCard.querySelector(".creative-image-container-wrapper");
+        if (imageWrapper) {
+          imageWrapper.innerHTML = `
+             <div class="creative-image-container" style="border-radius: 12px;">
+                 <img src="${toPublicAssetUrl(imageData.image_urls[0])}" class="creative-image" alt="Generated ad">
              </div>
-         </div>
-      `;
-      finalsOutput.appendChild(tempCard);
+          `;
+        }
+        const headlinePlaceholder = tempCard.querySelector(".headline-placeholder");
+        if (headlinePlaceholder) {
+          headlinePlaceholder.textContent = "Scoring and aligning copy text...";
+        }
+      }
     }
   }
 
@@ -2519,6 +2892,34 @@ function wireEvents() {
     showDashboard();
     setStatus("Finished ad workspace ready.");
   });
+
+  const btnModifyInputs = byId("btn-modify-inputs");
+  if (btnModifyInputs) {
+    btnModifyInputs.addEventListener("click", () => {
+      if (resultsPanel) resultsPanel.classList.add("hidden");
+      if (heroCard) heroCard.classList.remove("hidden");
+      const btnViewResults = byId("btn-view-results");
+      if (btnViewResults) btnViewResults.classList.remove("hidden");
+    });
+  }
+
+  const btnViewResults = byId("btn-view-results");
+  if (btnViewResults) {
+    btnViewResults.addEventListener("click", () => {
+      if (heroCard) heroCard.classList.add("hidden");
+      if (resultsPanel) resultsPanel.classList.remove("hidden");
+    });
+  }
+
+  const btnResetForm = byId("btn-reset-form");
+  if (btnResetForm) {
+    btnResetForm.addEventListener("click", resetGenerationForm);
+  }
+
+  const btnResetFormResults = byId("btn-reset-form-results");
+  if (btnResetFormResults) {
+    btnResetFormResults.addEventListener("click", resetGenerationForm);
+  }
 
   const supBtnKb = byId("sup-btn-kb");
   if (supBtnKb) {
@@ -2674,9 +3075,8 @@ function wireEvents() {
                           <p class="cta"><strong>CTA:</strong> ${esc(c.cta || "-")}</p>
                           <p class="score">Score: ${esc(c.score)}</p>
                         </div>
-                        <div class="creative-downloads">
-                            ${renderedUrl ? `<img src="${renderedUrl}" class="creative-thumb" alt="Preview" onerror="this.style.display='none'">` : ""}
-                            ${renderedUrl ? `<button class="view-btn" onclick="openImageModal('${esc(renderedUrl)}', '${esc(c.headline || "Creative")}')">View</button>` : ''}
+                        <div class="creative-downloads" style="margin-top: 10px; display: flex; gap: 8px;">
+                            ${renderedUrl ? `<button class="view-btn" onclick="openImageModal('${esc(renderedUrl)}', '${esc(c.headline || "Creative")}')">View Image</button>` : ''}
                             ${downloadButton(renderedUrl, `${c.concept_id}.png`, "Download PNG")}
                         </div>
                       </div>
@@ -2711,11 +3111,23 @@ function wireEvents() {
 
 
   heroGenerateButton.addEventListener("click", async () => {
+    hideFormError();
     const payload = await buildPayload();
     const validationErrors = validatePayload(payload);
     if (validationErrors.length) {
-      setStatus(validationErrors[0], true);
-      byId("f-brand")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      const firstError = validationErrors[0];
+      showFormError(firstError);
+      
+      let targetFieldId = "f-brand";
+      if (firstError.includes("Product Description")) targetFieldId = "f-desc";
+      else if (firstError.includes("Target Audience")) targetFieldId = "f-audience";
+      else if (firstError.includes("Key Benefit")) targetFieldId = "f-benefits";
+      
+      const fieldEl = byId(targetFieldId);
+      if (fieldEl) {
+        fieldEl.scrollIntoView({ behavior: "smooth", block: "center" });
+        fieldEl.focus();
+      }
       return;
     }
 
@@ -2725,12 +3137,12 @@ function wireEvents() {
     heroGenerateButton.disabled = true;
     heroGenerateButton.textContent = "Generating...";
 
-      try {
-        const scoreData = await executeCampaignPipeline(payload);
-        renderAll(scoreData);
-      } catch (error) {
-        setStatus(error.message || "Generation failed.", true);
-        showDashboard();
+    try {
+      const scoreData = await executeCampaignPipeline(payload);
+      renderAll(scoreData);
+    } catch (error) {
+      setStatus(error.message || "Generation failed.", true);
+      showDashboard();
     } finally {
       heroGenerateButton.disabled = false;
       heroGenerateButton.textContent = "Generate Final Ads";
@@ -2825,9 +3237,9 @@ function wireEvents() {
             if (validSessions.length > 0) {
               chatSessionsList.innerHTML = validSessions.map((s) => {
                 const title = s.title ? s.title : "Session: " + String(s.session_id).substring(0, 8);
-                return `<div class="chat-session-item" data-id="${s.session_id}" style="padding: 10px; border-bottom: 1px solid #e5e5e5; cursor: pointer; font-size: 0.9em;">
+                return `<div class="chat-session-item" data-id="${s.session_id}" style="padding: 10px; cursor: pointer; font-size: 0.9em;">
                   <strong>${esc(title)}</strong><br>
-                  <span style="font-size: 0.8em; color: #666;">${new Date(s.last_activity).toLocaleString()}</span>
+                  <span style="font-size: 0.8em;">${new Date(s.last_activity).toLocaleString()}</span>
                 </div>`;
               }).join("");
 
@@ -2848,6 +3260,15 @@ function wireEvents() {
         } catch {
           chatSessionsList.innerHTML = '<div style="padding: 10px;">Error loading sessions.</div>';
         }
+      }
+    });
+  }
+
+  const btnChatHistoryClose = byId("btn-chat-history-close");
+  if (btnChatHistoryClose) {
+    btnChatHistoryClose.addEventListener("click", () => {
+      if (chatHistoryPanel) {
+        chatHistoryPanel.classList.add("hidden");
       }
     });
   }

@@ -20,3 +20,13 @@ dist/
 build/
 *.egg-info/
 fix_index.py
+
+# Local test & utility scripts
+test_*.py
+check_*.py
+run_*.py
+save_*.py
+upload_*.py
+append.py
+fix.py
+
