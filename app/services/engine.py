@@ -300,11 +300,9 @@ class CreativeDirectorEngine:
     async def generate_campaign(self, payload: CreativeInput, client_email: str | None = None, is_guest: bool = False) -> CampaignPackage:
         concepts_resp = await self.generate_concepts(payload)
         
-        # Sequentially generate images
-        generated_creatives = []
-        for concept in concepts_resp.visual_concepts:
-            img = await self.generate_single_image(payload, concept)
-            generated_creatives.append(img)
+        # Parallel image generation
+        tasks = [self.generate_single_image(payload, concept) for concept in concepts_resp.visual_concepts]
+        generated_creatives = list(await asyncio.gather(*tasks))
             
         return await self.score_and_package(
             payload=payload,

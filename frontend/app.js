@@ -2802,14 +2802,10 @@ async function executeCampaignPipeline(payload) {
     finalsOutput.appendChild(placeholderCard);
   });
 
-  setStatus("Concepts generated! Rendering images sequentially...");
+  setStatus("Concepts generated! Generating images in parallel...");
 
-  // STEP 2: Generate Images Sequentially
-  const generated_creatives = [];
-  for (let i = 0; i < topConcepts.length; i++) {
-    const concept = topConcepts[i];
-    setStatus(`Generating Image ${i + 1} of ${topConcepts.length}...`);
-
+  // STEP 2: Generate Images in Parallel
+  const imagePromises = topConcepts.map(async (concept, i) => {
     // Update active card status to "Generating..."
     const tempCard = document.getElementById(`temp-card-${i}`);
     if (tempCard) {
@@ -2824,14 +2820,37 @@ async function executeCampaignPipeline(payload) {
       concept: concept
     };
 
-    const imageResponse = await fetch(`${API_BASE_URL}/generate-image`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(imageReq)
-    });
-    const imageData = await imageResponse.json();
-    if (!imageResponse.ok) {
-      console.error(`Image ${i + 1} failed`, imageData);
+    try {
+      const imageResponse = await fetch(`${API_BASE_URL}/generate-image`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(imageReq)
+      });
+      const imageData = await imageResponse.json();
+      if (!imageResponse.ok) {
+        throw new Error(imageData.detail || "Failed to generate image");
+      }
+
+      // Display generated image
+      if (imageData.image_urls && imageData.image_urls.length > 0) {
+        if (tempCard) {
+          const imageWrapper = tempCard.querySelector(".creative-image-container-wrapper");
+          if (imageWrapper) {
+            imageWrapper.innerHTML = `
+               <div class="creative-image-container" style="border-radius: 12px;">
+                   <img src="${toPublicAssetUrl(imageData.image_urls[0])}" class="creative-image" alt="Generated ad">
+               </div>
+            `;
+          }
+          const headlinePlaceholder = tempCard.querySelector(".headline-placeholder");
+          if (headlinePlaceholder) {
+            headlinePlaceholder.textContent = "Scoring and aligning copy text...";
+          }
+        }
+      }
+      return imageData;
+    } catch (err) {
+      console.error(`Image ${i + 1} failed`, err);
       if (tempCard) {
         const imageWrapper = tempCard.querySelector(".creative-image-container-wrapper");
         if (imageWrapper) {
@@ -2847,37 +2866,18 @@ async function executeCampaignPipeline(payload) {
           headlinePlaceholder.style.color = "#ef4444";
         }
       }
-      // push an empty/failed creative so scoring doesn't break
-      generated_creatives.push({
+      // return an empty/failed creative so scoring doesn't break
+      return {
          concept_id: concept.concept_id,
          provider: "unknown",
          status: "failed",
          prompt: concept.generation_prompt,
-         error: "Failed to generate image"
-      });
-      continue;
+         error: err.message || "Failed to generate image"
+      };
     }
+  });
 
-    generated_creatives.push(imageData);
-
-    // Display generated image
-    if (imageData.image_urls && imageData.image_urls.length > 0) {
-      if (tempCard) {
-        const imageWrapper = tempCard.querySelector(".creative-image-container-wrapper");
-        if (imageWrapper) {
-          imageWrapper.innerHTML = `
-             <div class="creative-image-container" style="border-radius: 12px;">
-                 <img src="${toPublicAssetUrl(imageData.image_urls[0])}" class="creative-image" alt="Generated ad">
-             </div>
-          `;
-        }
-        const headlinePlaceholder = tempCard.querySelector(".headline-placeholder");
-        if (headlinePlaceholder) {
-          headlinePlaceholder.textContent = "Scoring and aligning copy text...";
-        }
-      }
-    }
-  }
+  const generated_creatives = await Promise.all(imagePromises);
 
   // STEP 3: Score and Package
   setStatus("All images generated! Running AI Scoring and Final Assembly...");
