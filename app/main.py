@@ -14,6 +14,7 @@ from app.api.routes.instagram import router as instagram_router
 from app.api.routes.suggestions import router as suggestions_router
 from app.api.routes.providers import router as providers_router
 from app.api.routes.auth import router as auth_router
+from app.api.routes.execute import router as execute_router
 from app.core.config import get_settings
 from app.services.engine import ServiceContainer
 
@@ -96,6 +97,7 @@ app.include_router(instagram_router)
 app.include_router(suggestions_router)
 app.include_router(providers_router)
 app.include_router(auth_router)
+app.include_router(execute_router)
 app.mount("/frontend", StaticFiles(directory=str(FRONTEND_DIR)), name="frontend")
 
 @app.get("/output/{file_path:path}")

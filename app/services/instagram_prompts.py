@@ -2,7 +2,6 @@ import json
 
 from app.models import InstagramReelsRequest, InstagramReelsResponse, ReelScript
 
-
 INSTAGRAM_SYSTEM_PROMPT = """
 You are the core Instagram Reel Intelligence system inside Creative Director Engine.
 

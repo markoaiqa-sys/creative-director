@@ -1,27 +1,70 @@
+# Python
 __pycache__/
 .pytest_cache/
+*.pyc
+*.pyo
+*.egg-info/
+*.egg
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+
+# Virtual environments
 .venv/
+venv/
+
+# Environment variables
 .env
 *.env
 creative-director.env
+.env.local
+.env.*.local
+
+# Credentials & Secrets
 google-credentials.json
-*.pyc
+*.json.secret
+*.pem
+*.key
+
+# Logs
 *.log
 *.err.log
+*.out.log
+uvicorn.*.log
+uvicorn.*.err.log
+uvicorn.*.out.log
+
+# Generated/Output directories
 output/
 test_output/
 scratch/
-.vscode/
-.idea/
-.DS_Store
-Thumbs.db
-node_modules/
 dist/
 build/
-*.egg-info/
-fix_index.py
 
-# Local test & utility scripts
+# IDE & Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+*.iml
+
+# Node (if used in frontend)
+node_modules/
+npm-debug.log
+
+# Test files (temporary)
 test_*.py
 check_*.py
 run_*.py
@@ -29,4 +72,28 @@ save_*.py
 upload_*.py
 append.py
 fix.py
+update.py
+
+# Temporary files
+*.tmp
+*.bak
+*.backup
+temp/
+tmp/
+
+# Image dumps & screenshots
+*.png
+*.jpg
+*.jpeg
+*.gif
+IMG_*.png
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 
